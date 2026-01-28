@@ -7,20 +7,66 @@ import 'project_gallery_screen.dart';
 import '../shared/project_chat_screen.dart';
 import '../../components/project_timeline_widget.dart';
 
-class ClientProjectTimeline extends StatelessWidget {
-  final String projectId;
-  final Map<String, dynamic> projectData;
+class ClientProjectTimeline extends StatefulWidget {
+  final String widget.projectId;
+  final Map<String, dynamic> widget.projectData;
 
   const ClientProjectTimeline({
     super.key,
-    required this.projectId,
-    required this.projectData,
+    required this.widget.projectId,
+    required this.widget.projectData,
   });
+
+  @override
+  State<ClientProjectTimeline> createState() => _ClientProjectTimelineState();
+}
+
+class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
+  int _pendingMilestonesCount = 0;
+  int _pendingActivityCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToNotifications();
+  }
+
+  void _listenToNotifications() {
+    // Listen to pending milestones (awaiting approval)
+    FirebaseFirestore.instance
+        .collection('projects')
+        .doc(widget.widget.projectId)
+        .collection('milestones')
+        .where('status', isEqualTo: 'awaiting_approval')
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _pendingMilestonesCount = snapshot.docs.length;
+        });
+      }
+    });
+
+    // Listen to pending change orders
+    FirebaseFirestore.instance
+        .collection('projects')
+        .doc(widget.widget.projectId)
+        .collection('change_orders')
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _pendingActivityCount = snapshot.docs.length;
+        });
+      }
+    });
+  }
 
   Future<bool> _hasLeftReview() async {
     try {
-      final contractorRef = projectData['contractor_ref'] as DocumentReference;
-      final projectRef = FirebaseFirestore.instance.collection('projects').doc(projectId);
+      final contractorRef = widget.widget.projectData['contractor_ref'] as DocumentReference;
+      final projectRef = FirebaseFirestore.instance.collection('projects').doc(widget.widget.projectId);
 
       final reviewsSnapshot = await contractorRef
           .collection('reviews')
@@ -46,7 +92,7 @@ class ClientProjectTimeline extends StatelessWidget {
       // Update change order status
       await FirebaseFirestore.instance
           .collection('projects')
-          .doc(projectId)
+          .doc(widget.projectId)
           .collection('change_orders')
           .doc(changeOrderId)
           .update({
@@ -59,14 +105,14 @@ class ClientProjectTimeline extends StatelessWidget {
       if (approve) {
         final changeOrderDoc = await FirebaseFirestore.instance
             .collection('projects')
-            .doc(projectId)
+            .doc(widget.projectId)
             .collection('change_orders')
             .doc(changeOrderId)
             .get();
 
         final costChange = changeOrderDoc.data()?['cost_change'] as num? ?? 0;
 
-        await FirebaseFirestore.instance.collection('projects').doc(projectId).update({
+        await FirebaseFirestore.instance.collection('projects').doc(widget.projectId).update({
           'current_cost': FieldValue.increment(costChange.toDouble()),
         });
       }
@@ -91,19 +137,19 @@ class ClientProjectTimeline extends StatelessWidget {
   Stream<List<Map<String, dynamic>>> _getCombinedActivityStream() {
     final updatesStream = FirebaseFirestore.instance
         .collection('projects')
-        .doc(projectId)
+        .doc(widget.projectId)
         .collection('updates')
         .snapshots();
 
     final changeOrdersStream = FirebaseFirestore.instance
         .collection('projects')
-        .doc(projectId)
+        .doc(widget.projectId)
         .collection('change_orders')
         .snapshots();
 
     final milestonesStream = FirebaseFirestore.instance
         .collection('projects')
-        .doc(projectId)
+        .doc(widget.projectId)
         .collection('milestones')
         .where('is_completed', isEqualTo: true)
         .snapshots();
@@ -507,8 +553,8 @@ class ClientProjectTimeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('MMM d, yyyy');
-    final startDate = (projectData['start_date'] as Timestamp?)?.toDate();
-    final estimatedEndDate = (projectData['estimated_end_date'] as Timestamp?)?.toDate();
+    final startDate = (widget.projectData['start_date'] as Timestamp?)?.toDate();
+    final estimatedEndDate = (widget.projectData['estimated_end_date'] as Timestamp?)?.toDate();
 
     int? totalDays;
     int? daysElapsed;
@@ -523,7 +569,7 @@ class ClientProjectTimeline extends StatelessWidget {
     return Scaffold(
       extendBody: false,
       appBar: AppBar(
-        title: Text(projectData['project_name'] ?? 'Project'),
+        title: Text(widget.projectData['project_name'] ?? 'Project'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         actions: [
@@ -535,8 +581,8 @@ class ClientProjectTimeline extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => ProjectGalleryScreen(
-                    projectId: projectId,
-                    projectData: projectData,
+                    widget.projectId: widget.projectId,
+                    widget.projectData: widget.projectData,
                   ),
                 ),
               );
@@ -549,8 +595,8 @@ class ClientProjectTimeline extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => ProjectChatScreen(
-                    projectId: projectId,
-                    projectName: projectData['project_name'] ?? 'Project',
+                    widget.projectId: widget.projectId,
+                    projectName: widget.projectData['project_name'] ?? 'Project',
                     isContractor: false,
                   ),
                 ),
@@ -562,7 +608,7 @@ class ClientProjectTimeline extends StatelessWidget {
       body: Column(
         children: [
           // Review prompt banner (if project completed and no review yet)
-          if (projectData['status'] == 'completed')
+          if (widget.projectData['status'] == 'completed')
             FutureBuilder<bool>(
               future: _hasLeftReview(),
               builder: (context, snapshot) {
@@ -611,8 +657,8 @@ class ClientProjectTimeline extends StatelessWidget {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => LeaveReviewScreen(
-                                  projectId: projectId,
-                                  projectData: projectData,
+                                  widget.projectId: widget.projectId,
+                                  widget.projectData: widget.projectData,
                                 ),
                               ),
                             );
@@ -665,7 +711,7 @@ class ClientProjectTimeline extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '\$${(projectData['current_cost'] ?? projectData['original_cost'] ?? 0).toStringAsFixed(0)}',
+                          '\$${(widget.projectData['current_cost'] ?? widget.projectData['original_cost'] ?? 0).toStringAsFixed(0)}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 24,
@@ -674,9 +720,9 @@ class ClientProjectTimeline extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (projectData['current_cost'] != null &&
-                        projectData['original_cost'] != null &&
-                        projectData['current_cost'] != projectData['original_cost']) ...[
+                    if (widget.projectData['current_cost'] != null &&
+                        widget.projectData['original_cost'] != null &&
+                        widget.projectData['current_cost'] != widget.projectData['original_cost']) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
@@ -697,7 +743,7 @@ class ClientProjectTimeline extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '\$${(projectData['original_cost'] ?? 0).toStringAsFixed(0)}',
+                              '\$${(widget.projectData['original_cost'] ?? 0).toStringAsFixed(0)}',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,
@@ -812,9 +858,59 @@ class ClientProjectTimeline extends StatelessWidget {
                       labelColor: Theme.of(context).colorScheme.primary,
                       unselectedLabelColor: Colors.grey,
                       indicatorColor: Theme.of(context).colorScheme.primary,
-                      tabs: const [
-                        Tab(text: 'Milestones'),
-                        Tab(text: 'Activity'),
+                      tabs: [
+                        Tab(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('Milestones'),
+                              if (_pendingMilestonesCount > 0) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    _pendingMilestonesCount > 9 ? '9+' : '$_pendingMilestonesCount',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Tab(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('Activity'),
+                              if (_pendingActivityCount > 0) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    _pendingActivityCount > 9 ? '9+' : '$_pendingActivityCount',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -823,8 +919,8 @@ class ClientProjectTimeline extends StatelessWidget {
                       children: [
                         // Tab 1: Milestones
                         ProjectTimelineWidget(
-                          projectId: projectId,
-                          projectData: projectData,
+                          projectId: widget.projectId,
+                          projectData: widget.projectData,
                           userRole: 'client',
                           showProgressHeader: false,
                         ),
