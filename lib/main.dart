@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:rxdart/rxdart.dart';
 import 'screens/contractor/contractor_profile_screen.dart';
 import 'screens/contractor/create_project_screen.dart';
 import 'screens/contractor/project_details_screen.dart';
@@ -903,15 +904,29 @@ class ClientHomeScreen extends StatelessWidget {
               final doc = snapshot.data!.docs[index];
               final project = doc.data() as Map<String, dynamic>;
 
-              // Get number of updates
-              return StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('projects')
-                    .doc(doc.id)
-                    .collection('updates')
-                    .snapshots(),
-                builder: (context, updatesSnapshot) {
-                  final updatesCount = updatesSnapshot.data?.docs.length ?? 0;
+              // Get number of updates AND change orders using snapshots for real-time updates
+              final updatesStream = FirebaseFirestore.instance
+                  .collection('projects')
+                  .doc(doc.id)
+                  .collection('updates')
+                  .snapshots();
+
+              final changeOrdersStream = FirebaseFirestore.instance
+                  .collection('projects')
+                  .doc(doc.id)
+                  .collection('change_orders')
+                  .snapshots();
+
+              return StreamBuilder<List<QuerySnapshot>>(
+                stream: Rx.combineLatest2(
+                  updatesStream,
+                  changeOrdersStream,
+                  (QuerySnapshot a, QuerySnapshot b) => [a, b],
+                ),
+                builder: (context, countsSnapshot) {
+                  final updatesCount = countsSnapshot.hasData
+                      ? (countsSnapshot.data![0].docs.length + countsSnapshot.data![1].docs.length)
+                      : 0;
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 16),

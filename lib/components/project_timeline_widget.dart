@@ -458,38 +458,100 @@ class ProjectTimelineWidget extends StatelessWidget {
                     ] else if (milestone.status == 'in_progress') ...[
                       const SizedBox(height: 12),
                       if (milestone.changesRequested && userRole == 'contractor')
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.warning_amber, size: 16, color: Colors.orange),
-                              const SizedBox(width: 6),
-                              const Text(
-                                'Client requested changes',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.orange,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.orange.withOpacity(0.3)),
                               ),
-                              if (milestone.lastChangeRequestAt != null) ...[
-                                const SizedBox(width: 4),
-                                Text(
-                                  '• ${DateFormat.MMMd().format(milestone.lastChangeRequestAt!)}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey[600],
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.warning_amber, size: 16, color: Colors.orange),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'Client requested changes',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ],
-                          ),
+                                  if (milestone.lastChangeRequestAt != null) ...[
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '• ${DateFormat.MMMd().format(milestone.lastChangeRequestAt!)}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Show latest change request
+                            StreamBuilder<QuerySnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('projects')
+                                  .doc(projectId)
+                                  .collection('milestones')
+                                  .doc(milestone.milestoneId)
+                                  .collection('change_requests')
+                                  .orderBy('created_at', descending: true)
+                                  .limit(1)
+                                  .snapshots(),
+                              builder: (context, changeSnapshot) {
+                                if (!changeSnapshot.hasData || changeSnapshot.data!.docs.isEmpty) {
+                                  return const SizedBox.shrink();
+                                }
+
+                                final requestData = changeSnapshot.data!.docs.first.data() as Map<String, dynamic>;
+                                final requestText = requestData['request_text'] as String? ?? '';
+
+                                return Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.message, size: 14, color: Colors.orange),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Client feedback:',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.grey[700],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        requestText,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         )
                       else
                         Container(

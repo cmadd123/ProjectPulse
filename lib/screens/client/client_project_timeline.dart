@@ -140,28 +140,21 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
         .collection('projects')
         .doc(widget.projectId)
         .collection('updates')
-        .orderBy('created_at', descending: true)
         .snapshots();
 
     final changeOrdersStream = FirebaseFirestore.instance
         .collection('projects')
         .doc(widget.projectId)
         .collection('change_orders')
-        .orderBy('requested_at', descending: true)
         .snapshots();
 
-    final milestoneUpdatesStream = FirebaseFirestore.instance
-        .collectionGroup('milestone_updates')
-        .where('project_id', isEqualTo: widget.projectId)
-        .orderBy('posted_at', descending: true)
-        .snapshots();
-
-    // Combine the three streams using Rx.combineLatest3
-    return Rx.combineLatest3(
+    // Combine the two streams using Rx.combineLatest2
+    return Rx.combineLatest2(
       updatesStream,
       changeOrdersStream,
-      milestoneUpdatesStream,
-      (QuerySnapshot updates, QuerySnapshot changeOrders, QuerySnapshot milestoneUpdates) {
+      (QuerySnapshot updates, QuerySnapshot changeOrders) {
+        print('DEBUG: Activity stream - ${updates.docs.length} updates, ${changeOrders.docs.length} change orders');
+
         final List<Map<String, dynamic>> combined = [];
 
         // Add photo updates
@@ -186,20 +179,10 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
           });
         }
 
-        // Add milestone updates
-        for (var doc in milestoneUpdates.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          combined.add({
-            'type': 'milestone_update',
-            'id': doc.id,
-            'data': data,
-            'timestamp': (data['posted_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
-          });
-        }
-
         // Sort by timestamp (newest first)
         combined.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
 
+        print('DEBUG: Activity stream - returning ${combined.length} total items');
         return combined;
       },
     );
