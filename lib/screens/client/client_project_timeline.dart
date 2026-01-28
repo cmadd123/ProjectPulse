@@ -25,10 +25,12 @@ class ClientProjectTimeline extends StatefulWidget {
 class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
   int _pendingMilestonesCount = 0;
   int _pendingActivityCount = 0;
+  late final Stream<List<Map<String, dynamic>>> _activityStream;
 
   @override
   void initState() {
     super.initState();
+    _activityStream = _getCombinedActivityStream();
     _listenToNotifications();
   }
 
@@ -982,7 +984,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                         ),
                         // Tab 2: Activity (photos, change orders)
                         StreamBuilder<List<Map<String, dynamic>>>(
-                          stream: _getCombinedActivityStream(),
+                          stream: _activityStream,
                           builder: (context, snapshot) {
                             if (snapshot.connectionState == ConnectionState.waiting) {
                               return const Center(child: CircularProgressIndicator());

@@ -924,9 +924,11 @@ class ClientHomeScreen extends StatelessWidget {
                   (QuerySnapshot a, QuerySnapshot b) => [a, b],
                 ),
                 builder: (context, countsSnapshot) {
-                  final updatesCount = countsSnapshot.hasData
-                      ? (countsSnapshot.data![0].docs.length + countsSnapshot.data![1].docs.length)
-                      : 0;
+                  final photosCount = countsSnapshot.hasData ? countsSnapshot.data![0].docs.length : 0;
+                  final changeOrdersCount = countsSnapshot.hasData ? countsSnapshot.data![1].docs.length : 0;
+                  final updatesCount = photosCount + changeOrdersCount;
+
+                  print('DEBUG: Project ${doc.id} - $photosCount photos + $changeOrdersCount change orders = $updatesCount total');
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 16),
