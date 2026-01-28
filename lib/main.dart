@@ -904,115 +904,282 @@ class ClientHomeScreen extends StatelessWidget {
               final doc = snapshot.data!.docs[index];
               final project = doc.data() as Map<String, dynamic>;
 
-              // Get number of updates AND change orders using snapshots for real-time updates
+              // Get number of updates AND pending change orders using snapshots for real-time updates
               final updatesStream = FirebaseFirestore.instance
                   .collection('projects')
                   .doc(doc.id)
                   .collection('updates')
                   .snapshots();
 
-              final changeOrdersStream = FirebaseFirestore.instance
+              final pendingChangeOrdersStream = FirebaseFirestore.instance
                   .collection('projects')
                   .doc(doc.id)
                   .collection('change_orders')
+                  .where('status', isEqualTo: 'pending')
                   .snapshots();
 
               return StreamBuilder<List<QuerySnapshot>>(
                 stream: Rx.combineLatest2(
                   updatesStream,
-                  changeOrdersStream,
+                  pendingChangeOrdersStream,
                   (QuerySnapshot a, QuerySnapshot b) => [a, b],
                 ),
                 builder: (context, countsSnapshot) {
                   final photosCount = countsSnapshot.hasData ? countsSnapshot.data![0].docs.length : 0;
-                  final changeOrdersCount = countsSnapshot.hasData ? countsSnapshot.data![1].docs.length : 0;
-                  final updatesCount = photosCount + changeOrdersCount;
+                  final pendingChangeOrdersCount = countsSnapshot.hasData ? countsSnapshot.data![1].docs.length : 0;
+                  final updatesCount = photosCount + pendingChangeOrdersCount;
 
-                  print('DEBUG: Project ${doc.id} - $photosCount photos + $changeOrdersCount change orders = $updatesCount total');
+                  print('DEBUG: Project ${doc.id} - $photosCount photos + $pendingChangeOrdersCount pending change orders = $updatesCount total');
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ClientProjectTimeline(
-                              projectId: doc.id,
-                              projectData: project,
-                            ),
-                          ),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    project['project_name'] ?? 'Untitled Project',
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    project['status'] == 'active' ? 'Active' : 'Completed',
-                                    style: TextStyle(
-                                      color: Theme.of(context).colorScheme.primary,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.photo_library_outlined,
-                                  size: 18,
-                                  color: Colors.grey[600],
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '$updatesCount ${updatesCount == 1 ? 'update' : 'updates'}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[700],
-                                  ),
-                                ),
-                                const Spacer(),
-                                Icon(
-                                  Icons.arrow_forward_ios,
-                                  size: 16,
-                                  color: Theme.of(context).colorScheme.secondary,
-                                ),
-                              ],
-                            ),
-                          ],
+                  // Beautiful dashboard-style project card with milestone preview
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('projects')
+                        .doc(doc.id)
+                        .collection('milestones')
+                        .orderBy('order')
+                        .snapshots(),
+                    builder: (context, milestonesSnapshot) {
+                      final milestones = milestonesSnapshot.hasData ? milestonesSnapshot.data!.docs : [];
+                      final completedCount = milestones.where((m) => (m.data() as Map)['status'] == 'approved').length;
+                      final totalCount = milestones.length;
+                      final progress = totalCount > 0 ? completedCount / totalCount : 0.0;
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 20),
+                        elevation: 3,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                      ),
-                    ),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ClientProjectTimeline(
+                                  projectId: doc.id,
+                                  projectData: project,
+                                ),
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Header with gradient background
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Theme.of(context).colorScheme.primary,
+                                      Theme.of(context).colorScheme.secondary,
+                                    ],
+                                  ),
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            project['project_name'] ?? 'Untitled Project',
+                                            style: const TextStyle(
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          '${(progress * 100).toStringAsFixed(0)}%',
+                                          style: const TextStyle(
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      project['contractor_business_name'] ?? 'Contractor',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.white.withOpacity(0.9),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    // Progress bar
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: LinearProgressIndicator(
+                                        value: progress,
+                                        minHeight: 8,
+                                        backgroundColor: Colors.white.withOpacity(0.3),
+                                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      '$completedCount of $totalCount milestones complete',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white.withOpacity(0.9),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Milestone preview list
+                              Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (milestones.isNotEmpty) ...[
+                                      ...milestones.take(3).map((milestoneDoc) {
+                                        final milestone = milestoneDoc.data() as Map<String, dynamic>;
+                                        final status = milestone['status'] as String;
+                                        final isCompleted = status == 'approved';
+                                        final isActive = status == 'in_progress' || status == 'awaiting_approval';
+
+                                        Color statusColor = Colors.grey;
+                                        if (isCompleted) statusColor = Colors.green;
+                                        else if (status == 'awaiting_approval') statusColor = Colors.orange;
+                                        else if (status == 'in_progress') statusColor = Colors.blue;
+
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 12),
+                                          child: Row(
+                                            children: [
+                                              // Status indicator
+                                              Container(
+                                                width: 24,
+                                                height: 24,
+                                                decoration: BoxDecoration(
+                                                  color: isCompleted ? statusColor : Colors.white,
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(color: statusColor, width: 2),
+                                                ),
+                                                child: isCompleted
+                                                    ? const Icon(Icons.check, size: 14, color: Colors.white)
+                                                    : (isActive
+                                                        ? Center(
+                                                            child: Container(
+                                                              width: 10,
+                                                              height: 10,
+                                                              decoration: BoxDecoration(
+                                                                color: statusColor,
+                                                                shape: BoxShape.circle,
+                                                              ),
+                                                            ),
+                                                          )
+                                                        : null),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Text(
+                                                  milestone['name'] ?? 'Untitled',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                                                    color: isCompleted ? Colors.grey[600] : Colors.black87,
+                                                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                '\$${milestone['amount'] ?? 0}',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isCompleted ? Colors.green : Colors.grey[700],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                      if (milestones.length > 3) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '+${milestones.length - 3} more milestones',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                    const SizedBox(height: 12),
+                                    const Divider(height: 1),
+                                    const SizedBox(height: 12),
+                                    // Activity row at bottom
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.photo_library_outlined,
+                                          size: 18,
+                                          color: Colors.grey[600],
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '$photosCount ${photosCount == 1 ? 'photo' : 'photos'}',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey[700],
+                                          ),
+                                        ),
+                                        if (pendingChangeOrdersCount > 0) ...[
+                                          const SizedBox(width: 12),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.red,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.warning, size: 12, color: Colors.white),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  '$pendingChangeOrdersCount pending',
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        const Spacer(),
+                                        Icon(
+                                          Icons.arrow_forward,
+                                          size: 20,
+                                          color: Theme.of(context).colorScheme.primary,
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
               );

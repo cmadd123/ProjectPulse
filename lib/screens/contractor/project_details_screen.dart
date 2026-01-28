@@ -31,6 +31,13 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
   final _captionController = TextEditingController();
   bool _isUploading = false;
   File? _selectedImage;
+  late final Stream<List<Map<String, dynamic>>> _activityStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _activityStream = _getCombinedActivityStream();
+  }
 
   @override
   void dispose() {
@@ -858,7 +865,7 @@ Looking forward to working with you!
                         ),
                         // Tab 2: Activity (photos, change orders)
                         StreamBuilder<List<Map<String, dynamic>>>(
-                          stream: _getCombinedActivityStream(),
+                          stream: _activityStream,
                           builder: (context, snapshot) {
                             if (snapshot.connectionState == ConnectionState.waiting) {
                               return const Center(child: CircularProgressIndicator());
