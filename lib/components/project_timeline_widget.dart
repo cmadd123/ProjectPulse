@@ -439,14 +439,14 @@ class ProjectTimelineWidget extends StatelessWidget {
                           color: Colors.orange.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.schedule, size: 16, color: Colors.orange),
-                            SizedBox(width: 6),
+                            const Icon(Icons.schedule, size: 16, color: Colors.orange),
+                            const SizedBox(width: 6),
                             Text(
-                              'Awaiting your approval',
-                              style: TextStyle(
+                              userRole == 'client' ? 'Awaiting your approval' : 'Awaiting client approval',
+                              style: const TextStyle(
                                 fontSize: 12,
                                 color: Colors.orange,
                                 fontWeight: FontWeight.w600,
@@ -458,100 +458,10 @@ class ProjectTimelineWidget extends StatelessWidget {
                     ] else if (milestone.status == 'in_progress') ...[
                       const SizedBox(height: 12),
                       if (milestone.changesRequested && userRole == 'contractor')
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.warning_amber, size: 16, color: Colors.orange),
-                                  const SizedBox(width: 6),
-                                  const Text(
-                                    'Client requested changes',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.orange,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (milestone.lastChangeRequestAt != null) ...[
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '• ${DateFormat.MMMd().format(milestone.lastChangeRequestAt!)}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            // Show latest change request
-                            StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance
-                                  .collection('projects')
-                                  .doc(projectId)
-                                  .collection('milestones')
-                                  .doc(milestone.milestoneId)
-                                  .collection('change_requests')
-                                  .orderBy('created_at', descending: true)
-                                  .limit(1)
-                                  .snapshots(),
-                              builder: (context, changeSnapshot) {
-                                if (!changeSnapshot.hasData || changeSnapshot.data!.docs.isEmpty) {
-                                  return const SizedBox.shrink();
-                                }
-
-                                final requestData = changeSnapshot.data!.docs.first.data() as Map<String, dynamic>;
-                                final requestText = requestData['request_text'] as String? ?? '';
-
-                                return Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.orange.withOpacity(0.2)),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.message, size: 14, color: Colors.orange),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            'Client feedback:',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.grey[700],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        requestText,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
+                        _ChangeRequestWidget(
+                          projectId: projectId,
+                          milestoneId: milestone.milestoneId,
+                          lastChangeRequestAt: milestone.lastChangeRequestAt,
                         )
                       else
                         Container(
@@ -882,6 +792,149 @@ class ProjectTimelineWidget extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+// Collapsible change request widget
+class _ChangeRequestWidget extends StatefulWidget {
+  final String projectId;
+  final String milestoneId;
+  final DateTime? lastChangeRequestAt;
+
+  const _ChangeRequestWidget({
+    required this.projectId,
+    required this.milestoneId,
+    this.lastChangeRequestAt,
+  });
+
+  @override
+  State<_ChangeRequestWidget> createState() => _ChangeRequestWidgetState();
+}
+
+class _ChangeRequestWidgetState extends State<_ChangeRequestWidget> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _isExpanded = !_isExpanded),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber, size: 16, color: Colors.orange),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Client requested changes',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (widget.lastChangeRequestAt != null)
+                        Text(
+                          DateFormat.yMMMd().format(widget.lastChangeRequestAt!),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.orange,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_isExpanded) ...[
+          const SizedBox(height: 8),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('projects')
+                .doc(widget.projectId)
+                .collection('milestones')
+                .doc(widget.milestoneId)
+                .collection('change_requests')
+                .orderBy('created_at', descending: true)
+                .limit(1)
+                .snapshots(),
+            builder: (context, changeSnapshot) {
+              if (!changeSnapshot.hasData || changeSnapshot.data!.docs.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'No feedback available',
+                    style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
+                  ),
+                );
+              }
+
+              final requestData = changeSnapshot.data!.docs.first.data() as Map<String, dynamic>;
+              final requestText = requestData['request_text'] as String? ?? '';
+
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.message, size: 14, color: Colors.orange),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Client feedback:',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      requestText,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ],
     );
   }
 }
