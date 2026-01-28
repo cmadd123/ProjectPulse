@@ -283,18 +283,22 @@ class ProjectTimelineWidget extends StatelessWidget {
   Widget _buildMilestoneCard(BuildContext context, MilestoneRecord milestone, bool isFirst, bool isLast) {
     final statusColor = _getStatusColor(milestone.status);
     final isCompleted = milestone.status == 'approved';
+    final isPending = milestone.status == 'pending';
     final isActive = milestone.status == 'in_progress' || milestone.status == 'awaiting_approval';
     final currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
 
-    // Use a StatefulWidget wrapper for completed milestones to handle collapse
-    if (isCompleted) {
-      return _CollapsedMilestoneCard(
+    // Use collapsible widget for completed AND pending milestones
+    // Only "in_progress" and "awaiting_approval" are expanded by default
+    if (isCompleted || isPending) {
+      return _CollapsibleMilestoneCard(
         milestone: milestone,
         isFirst: isFirst,
         isLast: isLast,
         statusColor: statusColor,
         projectId: projectId,
         userRole: userRole,
+        isCompleted: isCompleted,
+        onStartWorking: userRole == 'contractor' && isPending ? () => _startWorking(context, milestone.milestoneId) : null,
       );
     }
 
@@ -457,7 +461,7 @@ class ProjectTimelineWidget extends StatelessWidget {
                             const Icon(Icons.schedule, size: 16, color: Colors.orange),
                             const SizedBox(width: 6),
                             Text(
-                              userRole == 'client' ? 'Awaiting your approval' : 'Awaiting client approval',
+                              userRole == 'client' ? 'Awaiting your approval' : 'Awaiting approval',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Colors.orange,
@@ -602,9 +606,9 @@ class ProjectTimelineWidget extends StatelessWidget {
                                 );
                               },
                               icon: const Icon(Icons.edit, size: 16),
-                              label: const Text('Changes'),
+                              label: const Text('Request', style: TextStyle(fontSize: 13)),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                               ),
                             ),
                           ),
@@ -854,7 +858,7 @@ class _ChangeRequestWidgetState extends State<_ChangeRequestWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.userRole == 'client' ? 'You requested changes' : 'Client requested changes',
+                        widget.userRole == 'client' ? 'You requested changes' : 'Changes requested',
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.orange,
@@ -926,7 +930,7 @@ class _ChangeRequestWidgetState extends State<_ChangeRequestWidget> {
                         const Icon(Icons.message, size: 14, color: Colors.orange),
                         const SizedBox(width: 6),
                         Text(
-                          widget.userRole == 'client' ? 'Your feedback:' : 'Client feedback:',
+                          widget.userRole == 'client' ? 'Your feedback:' : 'Feedback:',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -954,29 +958,33 @@ class _ChangeRequestWidgetState extends State<_ChangeRequestWidget> {
   }
 }
 
-// Collapsible completed milestone card
-class _CollapsedMilestoneCard extends StatefulWidget {
+// Collapsible milestone card (for completed and pending milestones)
+class _CollapsibleMilestoneCard extends StatefulWidget {
   final MilestoneRecord milestone;
   final bool isFirst;
   final bool isLast;
   final Color statusColor;
   final String projectId;
   final String userRole;
+  final bool isCompleted;
+  final VoidCallback? onStartWorking; // For pending milestones
 
-  const _CollapsedMilestoneCard({
+  const _CollapsibleMilestoneCard({
     required this.milestone,
     required this.isFirst,
     required this.isLast,
     required this.statusColor,
     required this.projectId,
     required this.userRole,
+    required this.isCompleted,
+    this.onStartWorking,
   });
 
   @override
-  State<_CollapsedMilestoneCard> createState() => _CollapsedMilestoneCardState();
+  State<_CollapsibleMilestoneCard> createState() => _CollapsibleMilestoneCardState();
 }
 
-class _CollapsedMilestoneCardState extends State<_CollapsedMilestoneCard> {
+class _CollapsibleMilestoneCardState extends State<_CollapsibleMilestoneCard> {
   bool _isExpanded = false;
   final currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
 
@@ -1002,20 +1010,22 @@ class _CollapsedMilestoneCardState extends State<_CollapsedMilestoneCard> {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: widget.statusColor,
+                    color: widget.isCompleted ? widget.statusColor : Colors.white,
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: widget.statusColor,
                       width: 3,
                     ),
                   ),
-                  child: const Icon(Icons.check, size: 18, color: Colors.white),
+                  child: widget.isCompleted
+                      ? const Icon(Icons.check, size: 18, color: Colors.white)
+                      : Icon(Icons.schedule, size: 16, color: widget.statusColor),
                 ),
                 if (!widget.isLast)
                   Expanded(
                     child: Container(
                       width: 3,
-                      color: widget.statusColor,
+                      color: widget.isCompleted ? widget.statusColor : Colors.grey[300]!,
                     ),
                   ),
               ],
@@ -1050,7 +1060,7 @@ class _CollapsedMilestoneCardState extends State<_CollapsedMilestoneCard> {
                       Row(
                         children: [
                           Icon(
-                            Icons.check_circle,
+                            widget.isCompleted ? Icons.check_circle : Icons.schedule,
                             color: widget.statusColor,
                             size: 20,
                           ),
@@ -1093,98 +1103,139 @@ class _CollapsedMilestoneCardState extends State<_CollapsedMilestoneCard> {
                           ),
                         ],
                         const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.check_circle, size: 16, color: Colors.green),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Completed ${DateFormat.yMMMd().format(widget.milestone.approvedAt!)}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.green,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              if (widget.milestone.releasedAmount != null) ...[
-                                const SizedBox(width: 8),
+                        if (widget.isCompleted) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                                const SizedBox(width: 6),
                                 Text(
-                                  '• Released: ${currencyFormat.format(widget.milestone.releasedAmount)}',
-                                  style: TextStyle(
+                                  'Completed ${DateFormat.yMMMd().format(widget.milestone.approvedAt!)}',
+                                  style: const TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey[700],
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        // Show milestone updates if expanded
-                        StreamBuilder<List<MilestoneUpdateRecord>>(
-                          stream: MilestoneUpdateRecord.getUpdates(widget.projectId, widget.milestone.milestoneId),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                              return const SizedBox.shrink();
-                            }
-
-                            final updates = snapshot.data!;
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 12),
-                                const Divider(),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.chat_bubble_outline, size: 16, color: Colors.grey),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Progress Updates (${updates.length})',
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.grey,
-                                      ),
+                                if (widget.milestone.releasedAmount != null) ...[
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '• Released: ${currencyFormat.format(widget.milestone.releasedAmount)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[700],
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                ...updates.map((update) => Container(
-                                      margin: const EdgeInsets.only(bottom: 8),
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[50],
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.grey[200]!),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            DateFormat('MMM d, h:mm a').format(update.postedAt),
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.grey[600],
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            update.text,
-                                            style: const TextStyle(fontSize: 14),
-                                          ),
-                                        ],
-                                      ),
-                                    )),
+                                  ),
+                                ],
                               ],
-                            );
-                          },
-                        ),
+                            ),
+                          ),
+                        ] else ...[
+                          // Pending milestone - show Start Working button for contractor
+                          if (widget.onStartWorking != null)
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: widget.onStartWorking,
+                                icon: const Icon(Icons.play_arrow),
+                                label: const Text('Start Working'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.schedule, size: 16, color: Colors.grey),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Not started',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                        // Show milestone updates only for completed milestones
+                        if (widget.isCompleted)
+                          StreamBuilder<List<MilestoneUpdateRecord>>(
+                            stream: MilestoneUpdateRecord.getUpdates(widget.projectId, widget.milestone.milestoneId),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+
+                              final updates = snapshot.data!;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 12),
+                                  const Divider(),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.chat_bubble_outline, size: 16, color: Colors.grey),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Progress Updates (${updates.length})',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ...updates.map((update) => Container(
+                                        margin: const EdgeInsets.only(bottom: 8),
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[50],
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: Colors.grey[200]!),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              DateFormat('MMM d, h:mm a').format(update.postedAt),
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              update.text,
+                                              style: const TextStyle(fontSize: 14),
+                                            ),
+                                          ],
+                                        ),
+                                      )),
+                                ],
+                              );
+                            },
+                          ),
                       ],
                     ],
                   ),
