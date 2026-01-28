@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:rxdart/rxdart.dart';
 import 'leave_review_screen.dart';
 import 'project_gallery_screen.dart';
 import '../shared/project_chat_screen.dart';
@@ -139,67 +140,69 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
         .collection('projects')
         .doc(widget.projectId)
         .collection('updates')
+        .orderBy('created_at', descending: true)
         .snapshots();
 
     final changeOrdersStream = FirebaseFirestore.instance
         .collection('projects')
         .doc(widget.projectId)
         .collection('change_orders')
+        .orderBy('requested_at', descending: true)
         .snapshots();
 
-    final milestonesStream = FirebaseFirestore.instance
-        .collection('projects')
-        .doc(widget.projectId)
-        .collection('milestones')
-        .where('is_completed', isEqualTo: true)
+    final milestoneUpdatesStream = FirebaseFirestore.instance
+        .collectionGroup('milestone_updates')
+        .where('project_id', isEqualTo: widget.projectId)
+        .orderBy('posted_at', descending: true)
         .snapshots();
 
-    return updatesStream.asyncExpand((updatesSnapshot) async* {
-      await for (final changeOrdersSnapshot in changeOrdersStream) {
-        await for (final milestonesSnapshot in milestonesStream) {
+    // Combine the three streams using Rx.combineLatest3
+    return Rx.combineLatest3(
+      updatesStream,
+      changeOrdersStream,
+      milestoneUpdatesStream,
+      (QuerySnapshot updates, QuerySnapshot changeOrders, QuerySnapshot milestoneUpdates) {
+        final List<Map<String, dynamic>> combined = [];
 
-      final List<Map<String, dynamic>> combined = [];
-
-      // Add photo updates
-      for (var doc in updatesSnapshot.docs) {
-        final data = doc.data();
-        combined.add({
-          'type': 'photo_update',
-          'id': doc.id,
-          'data': data,
-          'timestamp': (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        });
-      }
-
-      // Add change orders
-      for (var doc in changeOrdersSnapshot.docs) {
-        final data = doc.data();
-        combined.add({
-          'type': 'change_order',
-          'id': doc.id,
-          'data': data,
-          'timestamp': (data['requested_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        });
-      }
-
-      // Add completed milestones
-      for (var doc in milestonesSnapshot.docs) {
-        final data = doc.data();
-        combined.add({
-          'type': 'milestone',
-          'id': doc.id,
-          'data': data,
-          'timestamp': (data['completed_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        });
-      }
-
-      // Sort by timestamp (newest first)
-      combined.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
-
-      yield combined;
+        // Add photo updates
+        for (var doc in updates.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          combined.add({
+            'type': 'photo_update',
+            'id': doc.id,
+            'data': data,
+            'timestamp': (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          });
         }
-      }
-    });
+
+        // Add change orders
+        for (var doc in changeOrders.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          combined.add({
+            'type': 'change_order',
+            'id': doc.id,
+            'data': data,
+            'timestamp': (data['requested_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          });
+        }
+
+        // Add milestone updates
+        for (var doc in milestoneUpdates.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          combined.add({
+            'type': 'milestone_update',
+            'id': doc.id,
+            'data': data,
+            'timestamp': (data['posted_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          });
+        }
+
+        // Sort by timestamp (newest first)
+        combined.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+
+        return combined;
+      },
+    );
   }
 
   Widget _buildPhotoUpdateCard(BuildContext context, Map<String, dynamic> activity, int index) {
@@ -543,6 +546,76 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMilestoneUpdateCard(Map<String, dynamic> activity) {
+    final data = activity['data'] as Map<String, dynamic>;
+    final date = activity['timestamp'] as DateTime;
+    final text = data['text'] as String;
+    final milestoneId = data['milestone_id'] as String? ?? '';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 20),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.blue[200]!, width: 1.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              children: [
+                Icon(
+                  Icons.update,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Milestone Update',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  DateFormat('MMM d, h:mm a').format(date),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // Update text
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
             ),
           ],
         ),
@@ -983,6 +1056,8 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                                   return _buildChangeOrderCard(context, activity);
                                 } else if (type == 'milestone') {
                                   return _buildMilestoneCard(activity);
+                                } else if (type == 'milestone_update') {
+                                  return _buildMilestoneUpdateCard(activity);
                                 }
 
                                 return const SizedBox.shrink();

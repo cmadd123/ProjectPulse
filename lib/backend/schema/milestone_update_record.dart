@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class MilestoneUpdateRecord {
   final String updateId;
+  final String projectId;
+  final String milestoneId;
   final String text;
   final DocumentReference postedBy;
   final DateTime postedAt;
@@ -12,6 +14,8 @@ class MilestoneUpdateRecord {
 
   MilestoneUpdateRecord({
     required this.updateId,
+    required this.projectId,
+    required this.milestoneId,
     required this.text,
     required this.postedBy,
     required this.postedAt,
@@ -24,6 +28,8 @@ class MilestoneUpdateRecord {
     final data = doc.data() as Map<String, dynamic>;
     return MilestoneUpdateRecord(
       updateId: doc.id,
+      projectId: data['project_id'] as String? ?? '',
+      milestoneId: data['milestone_id'] as String? ?? '',
       text: data['text'] as String? ?? '',
       postedBy: data['posted_by'] as DocumentReference,
       postedAt: (data['posted_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -35,6 +41,8 @@ class MilestoneUpdateRecord {
 
   Map<String, dynamic> toFirestore() {
     return {
+      'project_id': projectId,
+      'milestone_id': milestoneId,
       'text': text,
       'posted_by': postedBy,
       'posted_at': Timestamp.fromDate(postedAt),

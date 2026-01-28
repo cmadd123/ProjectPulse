@@ -47,6 +47,8 @@ class _AddMilestoneUpdateBottomSheetState extends State<AddMilestoneUpdateBottom
 
       final update = MilestoneUpdateRecord(
         updateId: '',
+        projectId: widget.projectId,
+        milestoneId: widget.milestoneId,
         text: _textController.text.trim(),
         postedBy: userRef,
         postedAt: DateTime.now(),
