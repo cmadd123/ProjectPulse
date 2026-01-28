@@ -8,13 +8,13 @@ import '../shared/project_chat_screen.dart';
 import '../../components/project_timeline_widget.dart';
 
 class ClientProjectTimeline extends StatefulWidget {
-  final String widget.projectId;
-  final Map<String, dynamic> widget.projectData;
+  final String projectId;
+  final Map<String, dynamic> projectData;
 
   const ClientProjectTimeline({
     super.key,
-    required this.widget.projectId,
-    required this.widget.projectData,
+    required this.projectId,
+    required this.projectData,
   });
 
   @override
@@ -35,7 +35,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
     // Listen to pending milestones (awaiting approval)
     FirebaseFirestore.instance
         .collection('projects')
-        .doc(widget.widget.projectId)
+        .doc(widget.projectId)
         .collection('milestones')
         .where('status', isEqualTo: 'awaiting_approval')
         .snapshots()
@@ -50,7 +50,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
     // Listen to pending change orders
     FirebaseFirestore.instance
         .collection('projects')
-        .doc(widget.widget.projectId)
+        .doc(widget.projectId)
         .collection('change_orders')
         .where('status', isEqualTo: 'pending')
         .snapshots()
@@ -65,8 +65,8 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
 
   Future<bool> _hasLeftReview() async {
     try {
-      final contractorRef = widget.widget.projectData['contractor_ref'] as DocumentReference;
-      final projectRef = FirebaseFirestore.instance.collection('projects').doc(widget.widget.projectId);
+      final contractorRef = widget.projectData['contractor_ref'] as DocumentReference;
+      final projectRef = FirebaseFirestore.instance.collection('projects').doc(widget.projectId);
 
       final reviewsSnapshot = await contractorRef
           .collection('reviews')
@@ -581,8 +581,8 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => ProjectGalleryScreen(
-                    widget.projectId: widget.projectId,
-                    widget.projectData: widget.projectData,
+                    projectId: widget.projectId,
+                    projectData: widget.projectData,
                   ),
                 ),
               );
@@ -595,7 +595,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => ProjectChatScreen(
-                    widget.projectId: widget.projectId,
+                    projectId: widget.projectId,
                     projectName: widget.projectData['project_name'] ?? 'Project',
                     isContractor: false,
                   ),
@@ -657,8 +657,8 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => LeaveReviewScreen(
-                                  widget.projectId: widget.projectId,
-                                  widget.projectData: widget.projectData,
+                                  projectId: widget.projectId,
+                                  projectData: widget.projectData,
                                 ),
                               ),
                             );
