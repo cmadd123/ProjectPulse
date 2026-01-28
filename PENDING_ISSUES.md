@@ -33,11 +33,65 @@ OutlinedButton.icon(
 )
 ```
 
+### ✅ 2. Tab Notification Badges (FIXED - v0.0.46)
+
+**Problem:** Users can't tell when there are new updates without opening tabs
+
+**Solution:** Converted to StatefulWidget with real-time Firestore streams
+- Converted `ClientProjectTimeline` from StatelessWidget to StatefulWidget
+- Added Firestore streams to count pending items:
+  - Milestones: Counts milestones with `status == 'awaiting_approval'`
+  - Activity: Counts change orders with `status == 'pending'`
+- Red notification badges show count (or "9+" if > 9)
+- Badges update in real-time when items are added/approved
+
+**Code:**
+```dart
+// In initState, listen to Firestore
+FirebaseFirestore.instance
+    .collection('projects')
+    .doc(widget.projectId)
+    .collection('milestones')
+    .where('status', isEqualTo: 'awaiting_approval')
+    .snapshots()
+    .listen((snapshot) {
+  if (mounted) {
+    setState(() {
+      _pendingMilestonesCount = snapshot.docs.length;
+    });
+  }
+});
+
+// Tabs with badges
+Tab(
+  child: Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const Text('Milestones'),
+      if (_pendingMilestonesCount > 0) ...[
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.red,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            _pendingMilestonesCount > 9 ? '9+' : '$_pendingMilestonesCount',
+            style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    ],
+  ),
+)
+```
+
 ---
 
 ## Pending Issues (High Priority)
 
-### 1. Tab Notification Badges (TODO - Complex)
+### 1. Project Card Update Count (TODO - Complex)
 
 **Problem:** Users can't tell when there are new updates without opening tabs
 
@@ -92,7 +146,7 @@ Count should include:
 
 ---
 
-## Current Status (v0.0.45)
+## Current Status (v0.0.46)
 
 ### Completed Features
 - ✅ Interactive milestone timeline with progress updates
@@ -103,6 +157,7 @@ Count should include:
 - ✅ Real-time milestone status updates
 - ✅ Color-coded milestone states (grey, blue, orange, green, red)
 - ✅ Fixed "Request Changes" button layout (icon + shorter text)
+- ✅ Tab notification badges for pending milestones and activities
 
 ### Known Working Features
 - Photo updates display in Activity tab
@@ -116,7 +171,7 @@ Count should include:
 ## Next Session Priorities
 
 1. ~~Fix "Request Changes" button layout~~ ✅ DONE
-2. Add tab notification badges (requires StatefulWidget conversion + Firestore changes)
+2. ~~Add tab notification badges~~ ✅ DONE
 3. Fix project card update count aggregation (requires finding client home screen)
 4. Test full contractor → client update flow
 5. Add Firebase Cloud Functions for actual push notifications (currently TODO)
