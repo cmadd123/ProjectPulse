@@ -136,21 +136,59 @@ class ProjectTimelineWidget extends StatelessWidget {
 
     if (confirmed != true) return;
 
+    // Show loading indicator
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 16),
+              Text('Approving milestone...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+        ),
+      );
+    }
+
     try {
+      print('DEBUG: Approving milestone $milestoneId in project $projectId');
+
       await MilestoneRecord.updateMilestone(projectId, milestoneId, {
         'status': 'approved',
         'approved_at': FieldValue.serverTimestamp(),
       });
 
+      print('DEBUG: Milestone approved successfully');
+
       if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Milestone approved! Payment will be released.')),
+          const SnackBar(
+            content: Text('✓ Milestone approved! Payment will be released.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
         );
       }
     } catch (e) {
+      print('DEBUG: Error approving milestone: $e');
       if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
         );
       }
     }
@@ -160,6 +198,8 @@ class ProjectTimelineWidget extends StatelessWidget {
     final completedCount = milestones.where((m) => m.status == 'approved').length;
     final totalCount = milestones.length;
     final progress = totalCount > 0 ? completedCount / totalCount : 0.0;
+
+    print('DEBUG: Progress bar - $completedCount of $totalCount approved (${(progress * 100).toStringAsFixed(0)}%)');
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -671,6 +711,10 @@ class ProjectTimelineWidget extends StatelessWidget {
         }
 
         final milestones = snapshot.data!;
+        print('DEBUG: StreamBuilder rebuilt with ${milestones.length} milestones');
+        for (var m in milestones) {
+          print('DEBUG:   - ${m.name}: ${m.status}');
+        }
 
         if (milestones.isEmpty) {
           return SingleChildScrollView(
