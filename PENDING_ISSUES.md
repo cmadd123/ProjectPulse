@@ -1,34 +1,59 @@
 # ProjectPulse - Pending Issues & Features
 
-## UI/UX Issues (Client View - 2026-01-27)
+## GitHub Repository
 
-### High Priority
+**Repo:** https://github.com/cmadd123/ProjectPulse
+**Status:** Backed up and version controlled ✅
 
-1. **Tab Notification Badges**
-   - Add notification dot/badge on "Activity" tab when there are new photo updates or change orders
-   - Add notification dot/badge on "Milestones" tab when there are milestones awaiting approval or new progress updates
-   - Badge should show count or just be a red dot indicator
-   - Clear badge when user views that tab
+---
 
-2. **"Request Changes" Button Layout**
-   - Currently showing 4 lines of text - too cramped
-   - Button text wrapping poorly
-   - Need to adjust button sizing or text to single line
-   - Located in: `lib/components/project_timeline_widget.dart` (Approve/Request Changes row)
+## Completed Fixes (2026-01-27)
 
-3. **Project Card Update Count**
-   - Project cards showing "0 updates" even when there are:
-     - Milestones awaiting approval
-     - Change orders to review
-     - Progress updates from contractor
-   - Need to aggregate all notification types into single count
-   - Located in: Client home screen project cards
+### ✅ 1. "Request Changes" Button Layout (FIXED - v0.0.45)
 
-### Implementation Notes
+**Problem:** Button text "Request Changes" wrapping to 4 lines - too cramped
 
-**Tab Badges:**
+**Solution:** Changed to icon + shorter text
+- Now uses `OutlinedButton.icon` with edit icon
+- Text changed to just "Changes"
+- Consistent styling with Approve button
+- Updated in both files:
+  - `lib/components/project_timeline_widget.dart`
+  - `lib/components/milestone_list_widget.dart`
+
+**Code:**
 ```dart
-// Suggested approach - track unread counts
+OutlinedButton.icon(
+  onPressed: () { /* TODO: Request changes */ },
+  icon: const Icon(Icons.edit, size: 16),
+  label: const Text('Changes'),
+  style: OutlinedButton.styleFrom(
+    padding: const EdgeInsets.symmetric(vertical: 12),
+  ),
+)
+```
+
+---
+
+## Pending Issues (High Priority)
+
+### 1. Tab Notification Badges (TODO - Complex)
+
+**Problem:** Users can't tell when there are new updates without opening tabs
+
+**Needed:**
+- Notification badge on "Activity" tab for new photo updates/change orders
+- Notification badge on "Milestones" tab for milestones awaiting approval
+- Badge should show count (e.g., "3") or red dot
+- Clear badge when user views that tab
+
+**Challenges:**
+- Need to convert `ClientProjectTimeline` from StatelessWidget to StatefulWidget
+- Need to add Firestore streams for unread counts
+- Need to track which items user has viewed (add `viewed_at` fields)
+
+**Suggested Approach:**
+```dart
 Tab(
   child: Row(
     mainAxisSize: MainAxisSize.min,
@@ -52,30 +77,22 @@ Tab(
 )
 ```
 
-**Request Changes Button:**
-```dart
-// Current (4 lines):
-OutlinedButton(
-  child: const Text('Request Changes'),
-)
+### 2. Project Card Update Count (TODO - Complex)
 
-// Options:
-// 1. Shorter text: "Request Edits" or "Changes"
-// 2. Icon + text
-// 3. Smaller font size
-// 4. Stack vertically instead of horizontally
-```
+**Problem:** Project cards showing "0 updates" even when there are pending items
 
-**Project Card Count:**
-- Count should include:
+**Needed:**
+Count should include:
   - Milestones with status `awaiting_approval`
-  - Progress updates not yet viewed (need to add `viewed_by_client` field)
+  - Progress updates not yet viewed (need to add `viewed_by_client` field to milestone_updates)
   - Change orders with status `pending`
-  - New photo updates (need to add `viewed_at` field)
+  - New photo updates (need to add `viewed_at` field to updates collection)
+
+**Location:** Client home screen project cards (need to find this screen)
 
 ---
 
-## Current Status (v0.0.44)
+## Current Status (v0.0.45)
 
 ### Completed Features
 - ✅ Interactive milestone timeline with progress updates
@@ -85,6 +102,7 @@ OutlinedButton(
 - ✅ Progress bar header (optional via `showProgressHeader` parameter)
 - ✅ Real-time milestone status updates
 - ✅ Color-coded milestone states (grey, blue, orange, green, red)
+- ✅ Fixed "Request Changes" button layout (icon + shorter text)
 
 ### Known Working Features
 - Photo updates display in Activity tab
@@ -97,8 +115,8 @@ OutlinedButton(
 
 ## Next Session Priorities
 
-1. Fix "Request Changes" button layout
-2. Add tab notification badges
-3. Fix project card update count aggregation
+1. ~~Fix "Request Changes" button layout~~ ✅ DONE
+2. Add tab notification badges (requires StatefulWidget conversion + Firestore changes)
+3. Fix project card update count aggregation (requires finding client home screen)
 4. Test full contractor → client update flow
 5. Add Firebase Cloud Functions for actual push notifications (currently TODO)
