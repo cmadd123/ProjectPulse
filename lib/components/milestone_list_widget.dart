@@ -314,11 +314,15 @@ class MilestoneListWidget extends StatelessWidget {
                               Row(
                                 children: [
                                   Expanded(
-                                    child: OutlinedButton(
+                                    child: OutlinedButton.icon(
                                       onPressed: () {
                                         // TODO: Request changes
                                       },
-                                      child: const Text('Request Changes'),
+                                      icon: const Icon(Icons.edit, size: 16),
+                                      label: const Text('Changes'),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
@@ -330,10 +334,11 @@ class MilestoneListWidget extends StatelessWidget {
                                           onMilestoneApprove!(milestone);
                                         }
                                       },
-                                      icon: const Icon(Icons.check),
+                                      icon: const Icon(Icons.check, size: 18),
                                       label: const Text('Approve'),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.green,
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
                                       ),
                                     ),
                                   ),
