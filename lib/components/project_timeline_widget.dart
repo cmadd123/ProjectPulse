@@ -8,6 +8,8 @@ import 'add_milestone_update_bottom_sheet.dart';
 import 'reply_to_update_bottom_sheet.dart';
 import 'request_changes_bottom_sheet.dart';
 
+// v0.0.54: Simplified timeline (Option B) - smaller circles, no connecting lines
+
 class ProjectTimelineWidget extends StatelessWidget {
   final String projectId;
   final Map<String, dynamic> projectData;
@@ -306,53 +308,43 @@ class ProjectTimelineWidget extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Timeline indicator
+          // Timeline indicator - simplified (Option B)
           SizedBox(
-            width: 40,
+            width: 24,
             child: Column(
               children: [
-                if (!isFirst)
-                  Expanded(
-                    child: Container(
-                      width: 3,
-                      color: isCompleted ? statusColor : Colors.grey[300],
-                    ),
-                  ),
+                const SizedBox(height: 16), // Top spacing
                 Container(
-                  width: 32,
-                  height: 32,
+                  width: 16,
+                  height: 16,
                   decoration: BoxDecoration(
                     color: isCompleted ? statusColor : Colors.white,
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: statusColor,
-                      width: 3,
+                      width: 2,
                     ),
                   ),
                   child: isCompleted
-                      ? const Icon(Icons.check, size: 18, color: Colors.white)
-                      : Center(
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: isActive ? statusColor : Colors.transparent,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
+                      ? const Icon(Icons.check, size: 10, color: Colors.white)
+                      : (isActive
+                          ? Center(
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            )
+                          : null),
                 ),
-                if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 3,
-                      color: isCompleted ? statusColor : Colors.grey[300],
-                    ),
-                  ),
+                const Spacer(),
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
 
           // Milestone card
           Expanded(
@@ -377,12 +369,6 @@ class ProjectTimelineWidget extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(
-                          _getStatusIcon(milestone.status),
-                          color: statusColor,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             milestone.name,
@@ -588,33 +574,30 @@ class ProjectTimelineWidget extends StatelessWidget {
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                showModalBottomSheet(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: Colors.white,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                                  ),
-                                  builder: (context) => RequestChangesBottomSheet(
-                                    projectId: projectId,
-                                    milestoneId: milestone.milestoneId,
-                                    milestoneName: milestone.name,
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.edit, size: 16),
-                              label: const Text('Request', style: TextStyle(fontSize: 13)),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                              ),
+                          OutlinedButton(
+                            onPressed: () {
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.white,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                ),
+                                builder: (context) => RequestChangesBottomSheet(
+                                  projectId: projectId,
+                                  milestoneId: milestone.milestoneId,
+                                  milestoneName: milestone.name,
+                                ),
+                              );
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.all(12),
+                              minimumSize: const Size(48, 48),
                             ),
+                            child: const Icon(Icons.edit, size: 20),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            flex: 2,
                             child: ElevatedButton.icon(
                               onPressed: () => _approveMilestone(context, milestone.milestoneId),
                               icon: const Icon(Icons.check, size: 18),
@@ -994,44 +977,32 @@ class _CollapsibleMilestoneCardState extends State<_CollapsibleMilestoneCard> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Timeline indicator
+          // Timeline indicator - simplified (Option B)
           SizedBox(
-            width: 40,
+            width: 24,
             child: Column(
               children: [
-                if (!widget.isFirst)
-                  Expanded(
-                    child: Container(
-                      width: 3,
-                      color: widget.statusColor,
-                    ),
-                  ),
+                const SizedBox(height: 16), // Top spacing
                 Container(
-                  width: 32,
-                  height: 32,
+                  width: 16,
+                  height: 16,
                   decoration: BoxDecoration(
                     color: widget.isCompleted ? widget.statusColor : Colors.white,
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: widget.statusColor,
-                      width: 3,
+                      width: 2,
                     ),
                   ),
                   child: widget.isCompleted
-                      ? const Icon(Icons.check, size: 18, color: Colors.white)
-                      : Icon(Icons.schedule, size: 16, color: widget.statusColor),
+                      ? const Icon(Icons.check, size: 10, color: Colors.white)
+                      : Icon(Icons.schedule, size: 10, color: widget.statusColor),
                 ),
-                if (!widget.isLast)
-                  Expanded(
-                    child: Container(
-                      width: 3,
-                      color: widget.isCompleted ? widget.statusColor : Colors.grey[300]!,
-                    ),
-                  ),
+                const Spacer(),
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
 
           // Milestone card
           Expanded(
@@ -1059,12 +1030,6 @@ class _CollapsibleMilestoneCardState extends State<_CollapsibleMilestoneCard> {
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            widget.isCompleted ? Icons.check_circle : Icons.schedule,
-                            color: widget.statusColor,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               widget.milestone.name,

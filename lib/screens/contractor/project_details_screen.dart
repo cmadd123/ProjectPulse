@@ -828,12 +828,102 @@ Looking forward to working with you!
             ),
           ),
 
-          // Timeline View (replacing old activity stream)
+          // Timeline View with Activity Tab
           Expanded(
-            child: ProjectTimelineWidget(
-              projectId: widget.projectId,
-              projectData: widget.projectData,
-              userRole: 'contractor', // TODO: Get from user profile
+            child: DefaultTabController(
+              length: 2,
+              child: Column(
+                children: [
+                  Container(
+                    color: Colors.white,
+                    child: TabBar(
+                      labelColor: Theme.of(context).colorScheme.primary,
+                      unselectedLabelColor: Colors.grey,
+                      indicatorColor: Theme.of(context).colorScheme.primary,
+                      tabs: const [
+                        Tab(text: 'Milestones'),
+                        Tab(text: 'Activity'),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        // Tab 1: Milestones
+                        ProjectTimelineWidget(
+                          projectId: widget.projectId,
+                          projectData: widget.projectData,
+                          userRole: 'contractor',
+                          showProgressHeader: true,
+                        ),
+                        // Tab 2: Activity (photos, change orders)
+                        StreamBuilder<List<Map<String, dynamic>>>(
+                          stream: _getCombinedActivityStream(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const Center(child: CircularProgressIndicator());
+                            }
+
+                            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                              return Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(32.0),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.photo_library_outlined,
+                                        size: 80,
+                                        color: Colors.grey[300],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'No activity yet',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          color: Colors.grey[600],
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Post photos and manage change orders',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: Colors.grey[500],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final activities = snapshot.data!;
+                            return ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: activities.length,
+                              itemBuilder: (context, index) {
+                                final activity = activities[index];
+                                switch (activity['type']) {
+                                  case 'photo_update':
+                                    return _buildPhotoUpdateCard(activity);
+                                  case 'change_order':
+                                    return _buildChangeOrderCard(activity);
+                                  case 'milestone':
+                                    return _buildMilestoneCard(activity);
+                                  default:
+                                    return const SizedBox.shrink();
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 

@@ -735,8 +735,8 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
               },
             ),
 
-          // Project header with progress
-          Container(
+          // Project header removed - now shown inside scrollable milestones tab
+          /* Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -902,7 +902,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                 ),
               ],
             ),
-          ),
+          ), */
 
           // Combined Timeline: Milestones + Activity
           Expanded(
@@ -975,12 +975,12 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                   Expanded(
                     child: TabBarView(
                       children: [
-                        // Tab 1: Milestones
+                        // Tab 1: Milestones (with scrollable header)
                         ProjectTimelineWidget(
                           projectId: widget.projectId,
                           projectData: widget.projectData,
                           userRole: 'client',
-                          showProgressHeader: false,
+                          showProgressHeader: true, // Changed to true so it scrolls with content
                         ),
                         // Tab 2: Activity (photos, change orders)
                         StreamBuilder<List<Map<String, dynamic>>>(

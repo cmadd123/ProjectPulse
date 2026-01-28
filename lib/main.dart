@@ -802,7 +802,7 @@ class _ContractorProjectsScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                'v0.0.43',
+                'v0.0.55',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 10,
@@ -1031,7 +1031,7 @@ class ClientHomeScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                'v0.0.43',
+                'v0.0.55',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 10,
