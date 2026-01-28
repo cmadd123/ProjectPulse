@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1086041277999",
+    "project_id": "projectpulse-7d258",
+    "storage_bucket": "projectpulse-7d258.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1086041277999:android:b8a81ed6798a1f44a2e8da",
+        "android_client_info": {
+          "package_name": "com.consciousapps.projectpulse"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1086041277999-jcnbgkfvb6ganrjpkr8llubj9fqohmcm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCGF2JABOUdwGifsRg68FjvTNlY22osjLo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1086041277999-jcnbgkfvb6ganrjpkr8llubj9fqohmcm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
