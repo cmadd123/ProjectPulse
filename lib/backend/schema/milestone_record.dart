@@ -16,6 +16,8 @@ class MilestoneRecord {
   final double? releasedAmount; // After fees
   final double? transactionFee;
   final String? disputeReason;
+  final bool changesRequested;
+  final DateTime? lastChangeRequestAt;
   final DateTime createdAt;
 
   MilestoneRecord({
@@ -33,6 +35,8 @@ class MilestoneRecord {
     this.releasedAmount,
     this.transactionFee,
     this.disputeReason,
+    this.changesRequested = false,
+    this.lastChangeRequestAt,
     required this.createdAt,
   });
 
@@ -53,6 +57,8 @@ class MilestoneRecord {
       releasedAmount: (data['released_amount'] as num?)?.toDouble(),
       transactionFee: (data['transaction_fee'] as num?)?.toDouble(),
       disputeReason: data['dispute_reason'] as String?,
+      changesRequested: data['changes_requested'] as bool? ?? false,
+      lastChangeRequestAt: (data['last_change_request_at'] as Timestamp?)?.toDate(),
       createdAt: (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -72,6 +78,8 @@ class MilestoneRecord {
       'released_amount': releasedAmount,
       'transaction_fee': transactionFee,
       'dispute_reason': disputeReason,
+      'changes_requested': changesRequested,
+      'last_change_request_at': lastChangeRequestAt != null ? Timestamp.fromDate(lastChangeRequestAt!) : null,
       'created_at': Timestamp.fromDate(createdAt),
     };
   }

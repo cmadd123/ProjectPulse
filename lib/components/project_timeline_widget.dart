@@ -6,6 +6,7 @@ import '../backend/schema/milestone_record.dart';
 import '../backend/schema/milestone_update_record.dart';
 import 'add_milestone_update_bottom_sheet.dart';
 import 'reply_to_update_bottom_sheet.dart';
+import 'request_changes_bottom_sheet.dart';
 
 class ProjectTimelineWidget extends StatelessWidget {
   final String projectId;
@@ -456,30 +457,65 @@ class ProjectTimelineWidget extends StatelessWidget {
                       ),
                     ] else if (milestone.status == 'in_progress') ...[
                       const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.construction, size: 16, color: Colors.blue),
-                            const SizedBox(width: 6),
-                            Text(
-                              milestone.startedAt != null
-                                ? 'Started ${DateFormat.yMMMd().format(milestone.startedAt!)}'
-                                : 'In progress',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.blue,
-                                fontWeight: FontWeight.w600,
+                      if (milestone.changesRequested && userRole == 'contractor')
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.warning_amber, size: 16, color: Colors.orange),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'Client requested changes',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                          ],
+                              if (milestone.lastChangeRequestAt != null) ...[
+                                const SizedBox(width: 4),
+                                Text(
+                                  '• ${DateFormat.MMMd().format(milestone.lastChangeRequestAt!)}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.construction, size: 16, color: Colors.blue),
+                              const SizedBox(width: 6),
+                              Text(
+                                milestone.startedAt != null
+                                  ? 'Started ${DateFormat.yMMMd().format(milestone.startedAt!)}'
+                                  : 'In progress',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                     // Progress updates section
                     StreamBuilder<List<MilestoneUpdateRecord>>(
@@ -566,7 +602,19 @@ class ProjectTimelineWidget extends StatelessWidget {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () {
-                                // TODO: Request changes
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.white,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                  ),
+                                  builder: (context) => RequestChangesBottomSheet(
+                                    projectId: projectId,
+                                    milestoneId: milestone.milestoneId,
+                                    milestoneName: milestone.name,
+                                  ),
+                                );
                               },
                               icon: const Icon(Icons.edit, size: 16),
                               label: const Text('Changes'),
