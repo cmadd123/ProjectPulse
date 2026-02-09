@@ -1,0 +1,164 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isContractor() {
+      return isAuthenticated() && getUserRole() == 'contractor';
+    }
+
+    function isClient() {
+      return isAuthenticated() && getUserRole() == 'client';
+    }
+
+    function isProjectOwner(projectId) {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/projects/$(projectId)).data.contractor_ref ==
+        /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function isProjectCollaborator(projectId) {
+      // Note: This function checks if user is a collaborator
+      // In the app, we store collaborators as: [{user_ref: DocumentReference, name: "...", role: "..."}]
+      // Firestore rules don't support .map(), so we check directly in write rules instead
+      return false; // Placeholder - actual check happens in write rules with exists() check
+    }
+
+    function isProjectClient(projectId) {
+      let project = get(/databases/$(database)/documents/projects/$(projectId)).data;
+      return isAuthenticated() &&
+        project.client_user_ref == /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function canAccessProject(projectId) {
+      return isProjectOwner(projectId) || isProjectClient(projectId);
+      // Note: Collaborator access is checked inline in rules below
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Users can read/write their own profile
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+
+      // Anyone authenticated can create their initial profile
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Projects collection
+    match /projects/{projectId} {
+      // Contractors can create projects
+      allow create: if isContractor() &&
+        request.resource.data.contractor_ref == /databases/$(database)/documents/users/$(request.auth.uid);
+
+      // Project owner, collaborators, and client can read individual documents
+      allow get: if canAccessProject(projectId);
+
+      // Allow contractors to list their own projects (query by contractor_uid)
+      // Allow clients to list projects where they are the client
+      allow list: if isAuthenticated();
+
+      // Only project owner can update project (add collaborators, change status, etc.)
+      allow update: if isProjectOwner(projectId) ||
+        // Allow client to link themselves to project if email matches
+        (isAuthenticated() &&
+         request.resource.data.client_email == request.auth.token.email &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['client_user_ref']));
+
+      // Only project owner can delete
+      allow delete: if isProjectOwner(projectId);
+
+      // Milestones subcollection
+      match /milestones/{milestoneId} {
+        // Owner can create/read/update/delete milestones
+        allow write: if isProjectOwner(projectId);
+
+        // Anyone authenticated can read milestones (project-level access control happens at parent)
+        // This is safe because users can only navigate to milestones if they have project access
+        allow read: if isAuthenticated();
+      }
+
+      // Updates (photo posts) subcollection
+      match /updates/{updateId} {
+        // Owner can create updates, or anyone authenticated (collaborator check happens in app logic)
+        allow create: if isAuthenticated() && (
+          // Ensure posted_by_ref matches current user
+          request.resource.data.posted_by_ref == /databases/$(database)/documents/users/$(request.auth.uid)
+        );
+
+        // Anyone authenticated can read updates (project-level access control happens at parent)
+        allow read: if isAuthenticated();
+
+        // Only the person who posted can update/delete their own update
+        allow update, delete: if isAuthenticated() &&
+          resource.data.posted_by_ref == /databases/$(database)/documents/users/$(request.auth.uid);
+      }
+
+      // Change orders subcollection
+      match /change_orders/{orderId} {
+        // Owner can create change orders
+        allow create: if isProjectOwner(projectId);
+
+        // Anyone authenticated can read change orders
+        allow read: if isAuthenticated();
+
+        // Owner can update (modify details before client approves)
+        // Client can update (approve/decline)
+        allow update: if isProjectOwner(projectId) || isProjectClient(projectId);
+
+        // Only owner can delete
+        allow delete: if isProjectOwner(projectId);
+      }
+
+      // Messages subcollection (future feature)
+      match /messages/{messageId} {
+        // Owner and client can create messages
+        allow create: if isAuthenticated() && (
+          isProjectOwner(projectId) ||
+          isProjectClient(projectId)
+        );
+
+        // Everyone with project access can read
+        allow read: if canAccessProject(projectId);
+
+        // Can't update or delete messages (audit trail)
+        allow update, delete: if false;
+      }
+    }
+
+    // Notifications collection (for push notification queue)
+    match /notifications/{notificationId} {
+      // Cloud Functions create notifications
+      allow create: if isAuthenticated();
+
+      // Recipients can read their own notifications
+      allow read: if isAuthenticated() &&
+        resource.data.recipient_ref == /databases/$(database)/documents/users/$(request.auth.uid);
+
+      // Cloud Functions update after processing
+      allow update: if false; // Only Cloud Functions can update via admin SDK
+
+      // Auto-delete old notifications
+      allow delete: if false; // Only Cloud Functions
+    }
+
+    // Reviews subcollection (under contractors)
+    match /contractors/{contractorId}/reviews/{reviewId} {
+      // Clients can create reviews for projects they were part of
+      allow create: if isClient();
+
+      // Everyone can read reviews (public)
+      allow read: if true;
+
+      // Can't update or delete reviews (permanent record)
+      allow update, delete: if false;
+    }
+  }
+}

@@ -5,16 +5,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:intl/intl.dart';
 import 'screens/contractor/contractor_profile_screen.dart';
+import 'screens/contractor/contractor_profile_setup_screen.dart';
 import 'screens/contractor/create_project_screen.dart';
 import 'screens/contractor/project_details_screen.dart';
 import 'screens/contractor/portfolio_screen.dart';
 import 'screens/client/client_project_timeline.dart';
 import 'services/deep_link_service.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+
+  // Initialize push notifications
+  await NotificationService.initialize();
 
   // Ensure status bar is visible with dark icons on light background
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -391,12 +397,52 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     final user = FirebaseAuth.instance.currentUser!;
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'user_id': user.uid,
-        'email': user.email,
-        'role': role,
-        'created_at': FieldValue.serverTimestamp(),
-      });
+      // If contractor, show profile setup screen first
+      if (role == 'contractor') {
+        if (mounted) {
+          final profileData = await Navigator.push<Map<String, String>>(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ContractorProfileSetupScreen(),
+            ),
+          );
+
+          if (profileData == null) {
+            // User cancelled
+            setState(() => _isLoading = false);
+            return;
+          }
+
+          // Save user with contractor profile
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'user_id': user.uid,
+            'email': user.email,
+            'role': role,
+            'contractor_profile': {
+              'business_name': profileData['business_name'] ?? 'My Business',
+              'owner_name': profileData['owner_name'] ?? user.displayName ?? '',
+              'phone': profileData['phone'] ?? '',
+              'specialties': [],
+              'rating_average': 0.0,
+              'total_reviews': 0,
+            },
+            'created_at': FieldValue.serverTimestamp(),
+          });
+        }
+      } else {
+        // Client - just save basic info
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'user_id': user.uid,
+          'email': user.email,
+          'role': role,
+          'client_profile': {
+            'name': user.displayName ?? '',
+            'phone': '',
+            'accessible_projects': [],
+          },
+          'created_at': FieldValue.serverTimestamp(),
+        });
+      }
 
       // Navigation will happen automatically via AuthWrapper stream
     } catch (e) {
@@ -703,11 +749,36 @@ class _ContractorProjectsScreen extends StatelessWidget {
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('projects')
-                .where('contractor_ref', isEqualTo: FirebaseFirestore.instance.collection('users').doc(user.uid))
+                .where('contractor_uid', isEqualTo: user.uid)
+                .orderBy('created_at', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
+              }
+
+              // Debug logging
+              if (snapshot.hasError) {
+                debugPrint('Error loading projects: ${snapshot.error}');
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 80, color: Colors.red[400]),
+                      const SizedBox(height: 16),
+                      Text('Error loading projects', style: TextStyle(color: Colors.red[600])),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text('${snapshot.error}', style: const TextStyle(fontSize: 12), textAlign: TextAlign.center),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              if (snapshot.hasData) {
+                debugPrint('Projects query result: ${snapshot.data!.docs.length} projects found for user ${user.uid}');
               }
 
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -762,7 +833,9 @@ class _ContractorProjectsScreen extends StatelessWidget {
                           Text(project['client_name'] ?? 'No client'),
                           const SizedBox(height: 4),
                           Text(
-                            '\$${project['current_cost'] ?? project['original_cost'] ?? 0}',
+                            NumberFormat.currency(symbol: '\$', decimalDigits: 2).format(
+                              (project['current_cost'] ?? project['original_cost'] ?? 0).toDouble()
+                            ),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.primary,
                               fontWeight: FontWeight.bold,
@@ -825,6 +898,7 @@ class _ContractorProjectsScreen extends StatelessWidget {
         icon: const Icon(Icons.add),
         label: const Text('New Project'),
         backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
       ),
     );
   }
@@ -1097,7 +1171,7 @@ class ClientHomeScreen extends StatelessWidget {
                                               ),
                                               const SizedBox(width: 8),
                                               Text(
-                                                '\$${milestone['amount'] ?? 0}',
+                                                NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(milestone['amount'] ?? 0),
                                                 style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.bold,

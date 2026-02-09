@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'package:rxdart/rxdart.dart';
 import 'leave_review_screen.dart';
-import 'project_gallery_screen.dart';
+import 'enhanced_photo_timeline.dart';
 import '../shared/project_chat_screen.dart';
 import '../../components/project_timeline_widget.dart';
+import '../../components/contractor_info_card.dart';
 
 class ClientProjectTimeline extends StatefulWidget {
   final String projectId;
@@ -25,12 +25,10 @@ class ClientProjectTimeline extends StatefulWidget {
 class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
   int _pendingMilestonesCount = 0;
   int _pendingActivityCount = 0;
-  late final Stream<List<Map<String, dynamic>>> _activityStream;
 
   @override
   void initState() {
     super.initState();
-    _activityStream = _getCombinedActivityStream();
     _listenToNotifications();
   }
 
@@ -137,58 +135,6 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
     }
   }
 
-  Stream<List<Map<String, dynamic>>> _getCombinedActivityStream() {
-    final updatesStream = FirebaseFirestore.instance
-        .collection('projects')
-        .doc(widget.projectId)
-        .collection('updates')
-        .snapshots();
-
-    final changeOrdersStream = FirebaseFirestore.instance
-        .collection('projects')
-        .doc(widget.projectId)
-        .collection('change_orders')
-        .snapshots();
-
-    // Combine the two streams using Rx.combineLatest2
-    return Rx.combineLatest2(
-      updatesStream,
-      changeOrdersStream,
-      (QuerySnapshot updates, QuerySnapshot changeOrders) {
-        print('DEBUG: Activity stream - ${updates.docs.length} updates, ${changeOrders.docs.length} change orders');
-
-        final List<Map<String, dynamic>> combined = [];
-
-        // Add photo updates
-        for (var doc in updates.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          combined.add({
-            'type': 'photo_update',
-            'id': doc.id,
-            'data': data,
-            'timestamp': (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
-          });
-        }
-
-        // Add change orders
-        for (var doc in changeOrders.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          combined.add({
-            'type': 'change_order',
-            'id': doc.id,
-            'data': data,
-            'timestamp': (data['requested_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
-          });
-        }
-
-        // Sort by timestamp (newest first)
-        combined.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
-
-        print('DEBUG: Activity stream - returning ${combined.length} total items');
-        return combined;
-      },
-    );
-  }
 
   Widget _buildPhotoUpdateCard(BuildContext context, Map<String, dynamic> activity, int index) {
     final data = activity['data'] as Map<String, dynamic>;
@@ -638,7 +584,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ProjectGalleryScreen(
+                  builder: (context) => EnhancedPhotoTimeline(
                     projectId: widget.projectId,
                     projectData: widget.projectData,
                   ),
@@ -665,6 +611,12 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
       ),
       body: Column(
         children: [
+          // Contractor branding/info card
+          ContractorInfoCard(
+            projectData: widget.projectData,
+            compact: true,
+          ),
+
           // Review prompt banner (if project completed and no review yet)
           if (widget.projectData['status'] == 'completed')
             FutureBuilder<bool>(
@@ -904,6 +856,101 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
             ),
           ), */
 
+          // Photo Gallery Button - Primary CTA for clients
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('projects')
+                .doc(widget.projectId)
+                .collection('updates')
+                .snapshots(),
+            builder: (context, snapshot) {
+              final photoCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
+
+              return Container(
+                margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Material(
+                  borderRadius: BorderRadius.circular(16),
+                  elevation: 3,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EnhancedPhotoTimeline(
+                            projectId: widget.projectId,
+                            projectData: widget.projectData,
+                          ),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Theme.of(context).colorScheme.primary,
+                            Theme.of(context).colorScheme.secondary,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.photo_library,
+                              color: Colors.white,
+                              size: 32,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'View Photo Timeline',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  photoCount > 0
+                                      ? '$photoCount photo${photoCount == 1 ? '' : 's'} • Latest updates from your project'
+                                      : 'No photos yet',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.9),
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.arrow_forward_ios,
+                            color: Colors.white.withOpacity(0.8),
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+
           // Combined Timeline: Milestones + Activity
           Expanded(
             child: DefaultTabController(
@@ -982,70 +1029,112 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                           userRole: 'client',
                           showProgressHeader: true, // Changed to true so it scrolls with content
                         ),
-                        // Tab 2: Activity (photos, change orders)
-                        StreamBuilder<List<Map<String, dynamic>>>(
-                          stream: _activityStream,
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting) {
-                              return const Center(child: CircularProgressIndicator());
-                            }
-
-                            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                              return Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(32.0),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.photo_library_outlined,
-                                        size: 80,
-                                        color: Colors.grey[300],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        'No activity yet',
-                                        style: TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.grey[700],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Photo updates and change orders will appear here',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey[500],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }
-
-                            final activities = snapshot.data!;
-
-                            return ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-                              itemCount: activities.length,
-                              itemBuilder: (context, index) {
-                                final activity = activities[index];
-                                final type = activity['type'] as String;
-
-                                if (type == 'photo_update') {
-                                  return _buildPhotoUpdateCard(context, activity, index);
-                                } else if (type == 'change_order') {
-                                  return _buildChangeOrderCard(context, activity);
-                                } else if (type == 'milestone') {
-                                  return _buildMilestoneCard(activity);
-                                } else if (type == 'milestone_update') {
-                                  return _buildMilestoneUpdateCard(activity);
+                        // Tab 2: Activity (photos, change orders) - Simpler approach without combined streams
+                        StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('projects')
+                              .doc(widget.projectId)
+                              .collection('updates')
+                              .orderBy('created_at', descending: true)
+                              .snapshots(),
+                          builder: (context, updatesSnapshot) {
+                            return StreamBuilder<QuerySnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('projects')
+                                  .doc(widget.projectId)
+                                  .collection('change_orders')
+                                  .orderBy('requested_at', descending: true)
+                                  .snapshots(),
+                              builder: (context, ordersSnapshot) {
+                                // Show loading only if both are waiting
+                                if (updatesSnapshot.connectionState == ConnectionState.waiting &&
+                                    ordersSnapshot.connectionState == ConnectionState.waiting) {
+                                  return const Center(child: CircularProgressIndicator());
                                 }
 
-                                return const SizedBox.shrink();
+                                final updates = updatesSnapshot.data?.docs ?? [];
+                                final orders = ordersSnapshot.data?.docs ?? [];
+
+                                // Combine and sort all items
+                                final List<Map<String, dynamic>> allItems = [];
+
+                                // Add photos
+                                for (var doc in updates) {
+                                  final data = doc.data() as Map<String, dynamic>;
+                                  allItems.add({
+                                    'type': 'photo_update',
+                                    'id': doc.id,
+                                    'data': data,
+                                    'timestamp': (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+                                  });
+                                }
+
+                                // Add change orders
+                                for (var doc in orders) {
+                                  final data = doc.data() as Map<String, dynamic>;
+                                  allItems.add({
+                                    'type': 'change_order',
+                                    'id': doc.id,
+                                    'data': data,
+                                    'timestamp': (data['requested_at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+                                  });
+                                }
+
+                                // Sort by timestamp
+                                allItems.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+
+                                if (allItems.isEmpty) {
+                                  return Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(32.0),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.photo_library_outlined,
+                                            size: 80,
+                                            color: Colors.grey[300],
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            'No activity yet',
+                                            style: TextStyle(
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.grey[700],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Photo updates and change orders will appear here',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey[500],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                return ListView.builder(
+                                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                                  itemCount: allItems.length,
+                                  itemBuilder: (context, index) {
+                                    final activity = allItems[index];
+                                    final type = activity['type'] as String;
+
+                                    if (type == 'photo_update') {
+                                      return _buildPhotoUpdateCard(context, activity, index);
+                                    } else if (type == 'change_order') {
+                                      return _buildChangeOrderCard(context, activity);
+                                    }
+
+                                    return const SizedBox.shrink();
+                                  },
+                                );
                               },
                             );
                           },

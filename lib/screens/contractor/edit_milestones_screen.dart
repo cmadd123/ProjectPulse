@@ -70,7 +70,9 @@ class _EditMilestonesScreenState extends State<EditMilestonesScreen> {
   }
 
   double _calculateAmount(double percentage) {
-    return widget.projectAmount * (percentage / 100);
+    // Calculate and round to 2 decimal places to avoid floating point errors
+    final amount = widget.projectAmount * (percentage / 100);
+    return double.parse(amount.toStringAsFixed(2));
   }
 
   double _getTotalPercentage() {

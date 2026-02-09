@@ -50,9 +50,15 @@ class DeepLinkService {
 
     final firstSegment = uri.pathSegments.first;
 
-    // Handle invite links: projectpulse://invite/{projectId}
-    // or https://projectpulse.app/invite/{projectId}
-    if (firstSegment == 'invite' && uri.pathSegments.length > 1) {
+    // Handle invite links: projectpulse://join/{projectId}
+    // or https://projectpulsehub.com/join/{projectId}
+    if ((firstSegment == 'join' || firstSegment == 'invite') && uri.pathSegments.length > 1) {
+      final projectId = uri.pathSegments[1];
+      _handleProjectInvite(context, projectId);
+    }
+
+    // Handle project links: https://projectpulsehub.com/project/{projectId}
+    else if (firstSegment == 'project' && uri.pathSegments.length > 1) {
       final projectId = uri.pathSegments[1];
       _handleProjectInvite(context, projectId);
     }
@@ -138,6 +144,12 @@ class DeepLinkService {
         });
       }
 
+      // Update project to link this client user
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      await FirebaseFirestore.instance.collection('projects').doc(projectId).update({
+        'client_user_ref': userRef,
+      });
+
       // Navigate to project timeline
       if (context.mounted) {
         Navigator.of(context).pushReplacement(
@@ -184,6 +196,12 @@ class DeepLinkService {
         await _navigateToProject(context, projectId, user);
       }
     }
+  }
+
+  /// Generate invite link for a project
+  String generateInviteLink(String projectId) {
+    // Simple HTTPS link that works with App Links
+    return 'https://projectpulsehub.com/join/$projectId';
   }
 
   /// Dispose subscriptions

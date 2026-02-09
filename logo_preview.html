@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProjectPulse Logo Concepts - Creative Edition</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      color: #2D3748;
+      margin-bottom: 10px;
+      font-size: 36px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #6c757d;
+      margin-bottom: 40px;
+      font-size: 18px;
+    }
+
+    .logo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+
+    .logo-card {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .logo-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .logo-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #2D3748;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .logo-display {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 220px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      padding: 20px;
+    }
+
+    .logo-display.dark {
+      background: #2D3748;
+    }
+
+    .logo-variations {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .variation-btn {
+      padding: 8px 16px;
+      background: #e9ecef;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #495057;
+      transition: all 0.2s;
+    }
+
+    .variation-btn:hover {
+      background: #dee2e6;
+    }
+
+    .variation-btn.active {
+      background: #FF6B35;
+      color: white;
+    }
+
+    .notes {
+      text-align: center;
+      color: #6c757d;
+      font-size: 14px;
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+
+    .color-info {
+      text-align: center;
+      margin-top: 40px;
+      padding: 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🏗️ ProjectPulse Logo Concepts</h1>
+    <p class="subtitle">Creative, memorable, professional - pick your favorite!</p>
+
+    <div class="logo-grid">
+
+      <!-- Logo 1: Flowing Connection -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 1: "The Connection"</div>
+        <div class="logo-display" data-logo="1">
+          <svg width="160" height="140" viewBox="0 0 160 140">
+            <defs>
+              <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <!-- Two nodes connecting with flowing energy -->
+            <circle cx="40" cy="70" r="25" fill="url(#grad1)" opacity="0.3"/>
+            <circle cx="120" cy="70" r="25" fill="url(#grad1)" opacity="0.3"/>
+            <!-- Flowing connection line -->
+            <path d="M 65 70 Q 80 40, 95 70"
+                  stroke="url(#grad1)" stroke-width="6" fill="none" stroke-linecap="round"/>
+            <path d="M 65 70 Q 80 100, 95 70"
+                  stroke="url(#grad1)" stroke-width="6" fill="none" stroke-linecap="round"/>
+            <!-- Central pulse dot -->
+            <circle cx="80" cy="70" r="8" fill="#FF6B35"/>
+            <circle cx="80" cy="70" r="4" fill="white"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Represents contractor-client connection with flowing energy between them</p>
+      </div>
+
+      <!-- Logo 2: Blueprint Circle -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 2: "Blueprint"</div>
+        <div class="logo-display" data-logo="2">
+          <svg width="140" height="140" viewBox="0 0 140 140">
+            <defs>
+              <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <!-- Outer ring -->
+            <circle cx="70" cy="70" r="55" stroke="url(#grad2)" stroke-width="4" fill="none"/>
+            <!-- Blueprint-style construction lines -->
+            <line x1="70" y1="20" x2="70" y2="120" stroke="url(#grad2)" stroke-width="2" opacity="0.3"/>
+            <line x1="20" y1="70" x2="120" y2="70" stroke="url(#grad2)" stroke-width="2" opacity="0.3"/>
+            <!-- Rising structure (abstract building) -->
+            <path d="M 45 85 L 45 55 L 60 45 L 60 85 Z" fill="#7C3AED" opacity="0.6"/>
+            <path d="M 62 85 L 62 50 L 77 40 L 77 85 Z" fill="url(#grad2)" opacity="0.8"/>
+            <path d="M 79 85 L 79 60 L 95 50 L 95 85 Z" fill="#FF6B35" opacity="0.7"/>
+            <!-- Base line -->
+            <line x1="40" y1="88" x2="100" y2="88" stroke="#2D3748" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Abstract building rising within blueprint circle - progress visualization</p>
+      </div>
+
+      <!-- Logo 3: Layered Waves -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 3: "Progress Waves"</div>
+        <div class="logo-display" data-logo="3">
+          <svg width="160" height="120" viewBox="0 0 160 120">
+            <defs>
+              <linearGradient id="grad3a" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:0.9" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:0.9" />
+              </linearGradient>
+            </defs>
+            <!-- Layered waves showing progress/momentum -->
+            <path d="M 10 80 Q 40 60, 80 75 T 150 80" stroke="#7C3AED" stroke-width="8" fill="none" opacity="0.4" stroke-linecap="round"/>
+            <path d="M 10 65 Q 40 45, 80 60 T 150 65" stroke="url(#grad3a)" stroke-width="8" fill="none" opacity="0.6" stroke-linecap="round"/>
+            <path d="M 10 50 Q 40 30, 80 45 T 150 50" stroke="#FF6B35" stroke-width="8" fill="none" opacity="0.8" stroke-linecap="round"/>
+            <!-- Rising arrow point -->
+            <path d="M 140 35 L 150 25 L 155 35" stroke="#FF6B35" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Momentum and progress building upward - dynamic and energetic</p>
+      </div>
+
+      <!-- Logo 4: Compass Star -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 4: "Guided Path"</div>
+        <div class="logo-display" data-logo="4">
+          <svg width="140" height="140" viewBox="0 0 140 140">
+            <defs>
+              <linearGradient id="grad4" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <!-- Compass/navigation star -->
+            <circle cx="70" cy="70" r="50" fill="url(#grad4)" opacity="0.15"/>
+            <!-- Star points -->
+            <path d="M 70 20 L 77 55 L 70 65 L 63 55 Z" fill="#7C3AED"/>
+            <path d="M 120 70 L 85 77 L 75 70 L 85 63 Z" fill="#FF6B35"/>
+            <path d="M 70 120 L 63 85 L 70 75 L 77 85 Z" fill="url(#grad4)"/>
+            <path d="M 20 70 L 55 63 L 65 70 L 55 77 Z" fill="#7C3AED" opacity="0.7"/>
+            <!-- Center circle -->
+            <circle cx="70" cy="70" r="12" fill="white"/>
+            <circle cx="70" cy="70" r="8" fill="url(#grad4)"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Navigation/guidance - helping contractors and clients stay on track</p>
+      </div>
+
+      <!-- Logo 5: Interlocking Blocks -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 5: "Building Blocks"</div>
+        <div class="logo-display" data-logo="5">
+          <svg width="140" height="140" viewBox="0 0 140 140">
+            <defs>
+              <linearGradient id="grad5" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <!-- Interlocking rounded squares forming a P -->
+            <rect x="25" y="30" width="35" height="35" rx="8" fill="#7C3AED"/>
+            <rect x="55" y="30" width="35" height="35" rx="8" fill="url(#grad5)"/>
+            <rect x="25" y="60" width="35" height="35" rx="8" fill="url(#grad5)" opacity="0.7"/>
+            <rect x="25" y="90" width="35" height="25" rx="8" fill="#FF6B35"/>
+            <!-- Accent square -->
+            <rect x="85" y="45" width="30" height="30" rx="6" fill="#FF6B35" opacity="0.4"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Modular blocks building something together - collaboration and structure</p>
+      </div>
+
+      <!-- Logo 6: Signal Ripple -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 6: "Signal"</div>
+        <div class="logo-display" data-logo="6">
+          <svg width="140" height="140" viewBox="0 0 140 140">
+            <defs>
+              <linearGradient id="grad6" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <!-- Rippling circles (communication/updates) -->
+            <circle cx="70" cy="70" r="15" fill="url(#grad6)"/>
+            <circle cx="70" cy="70" r="28" stroke="url(#grad6)" stroke-width="3" fill="none" opacity="0.6"/>
+            <circle cx="70" cy="70" r="42" stroke="url(#grad6)" stroke-width="3" fill="none" opacity="0.4"/>
+            <circle cx="70" cy="70" r="56" stroke="url(#grad6)" stroke-width="3" fill="none" opacity="0.2"/>
+            <!-- Small dots showing activity -->
+            <circle cx="70" cy="26" r="4" fill="#FF6B35"/>
+            <circle cx="103" cy="45" r="4" fill="#FF6B35" opacity="0.7"/>
+            <circle cx="95" cy="95" r="4" fill="#7C3AED" opacity="0.7"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Communication rippling out - real-time updates and transparency</p>
+      </div>
+
+      <!-- Logo 7: Ascending Steps -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 7: "Milestones"</div>
+        <div class="logo-display" data-logo="7">
+          <svg width="160" height="120" viewBox="0 0 160 120">
+            <defs>
+              <linearGradient id="grad7" x1="0%" y1="100%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <!-- Rising steps with checkmarks -->
+            <rect x="20" y="85" width="30" height="20" rx="4" fill="#7C3AED" opacity="0.5"/>
+            <path d="M 28 92 L 33 97 L 42 88" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+            <rect x="55" y="65" width="30" height="40" rx="4" fill="url(#grad7)" opacity="0.6"/>
+            <path d="M 63 77 L 68 82 L 77 73" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+            <rect x="90" y="45" width="30" height="60" rx="4" fill="#FF6B35" opacity="0.7"/>
+            <path d="M 98 60 L 103 65 L 112 56" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+            <rect x="125" y="25" width="30" height="80" rx="4" fill="#FF6B35"/>
+            <!-- Flag at top -->
+            <path d="M 140 20 L 140 10 L 152 13 L 140 16" fill="#FF6B35"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Project milestones climbing to completion - progress tracking</p>
+      </div>
+
+      <!-- Logo 8: Nested Hexagons -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 8: "Framework"</div>
+        <div class="logo-display" data-logo="8">
+          <svg width="140" height="140" viewBox="0 0 140 140">
+            <defs>
+              <linearGradient id="grad8" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <!-- Hexagon structure -->
+            <path d="M 70 15 L 105 35 L 105 75 L 70 95 L 35 75 L 35 35 Z"
+                  stroke="url(#grad8)" stroke-width="4" fill="none"/>
+            <path d="M 70 35 L 90 47 L 90 71 L 70 83 L 50 71 L 50 47 Z"
+                  fill="url(#grad8)" opacity="0.3"/>
+            <!-- Inner P shape -->
+            <rect x="58" y="50" width="6" height="30" rx="2" fill="url(#grad8)"/>
+            <path d="M 64 50 L 64 44 L 78 44 L 78 56 L 64 56"
+                  stroke="url(#grad8)" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Strong structure/framework - reliable and organized</p>
+      </div>
+
+      <!-- Logo 9: Photo Gallery Grid -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 9: "Gallery"</div>
+        <div class="logo-display" data-logo="9">
+          <svg width="140" height="140" viewBox="0 0 140 140">
+            <defs>
+              <linearGradient id="grad9" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <!-- Photo grid with one featured -->
+            <rect x="25" y="25" width="35" height="35" rx="4" fill="#7C3AED" opacity="0.4"/>
+            <rect x="65" y="25" width="50" height="50" rx="5" fill="url(#grad9)"/>
+            <!-- Camera icon in featured -->
+            <circle cx="90" cy="45" r="12" stroke="white" stroke-width="2.5" fill="none"/>
+            <circle cx="90" cy="45" r="6" fill="white"/>
+
+            <rect x="25" y="65" width="35" height="50" rx="4" fill="url(#grad9)" opacity="0.5"/>
+            <rect x="65" y="80" width="23" height="35" rx="3" fill="#FF6B35" opacity="0.6"/>
+            <rect x="92" y="80" width="23" height="35" rx="3" fill="#FF6B35" opacity="0.4"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Photo timeline - the core feature of daily updates</p>
+      </div>
+
+      <!-- Logo 10: Abstract P -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 10: "Modern P"</div>
+        <div class="logo-display" data-logo="10">
+          <svg width="120" height="140" viewBox="0 0 120 140">
+            <defs>
+              <linearGradient id="grad10" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+            <!-- Modern, flowing P -->
+            <path d="M 35 110 L 35 30 Q 35 20, 45 20 L 75 20 Q 95 20, 95 40 L 95 55 Q 95 75, 75 75 L 45 75"
+                  stroke="url(#grad10)" stroke-width="14" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Accent dots -->
+            <circle cx="45" cy="95" r="6" fill="#FF6B35"/>
+            <circle cx="45" cy="110" r="4" fill="#FF6B35" opacity="0.6"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Clean lettermark - simple, professional, versatile</p>
+      </div>
+
+    </div>
+
+    <div class="color-info">
+      <h3 style="color: #2D3748; margin-bottom: 10px;">Color Palette</h3>
+      <p style="color: #6c757d;">Orange: <strong>#FF6B35</strong> | Purple: <strong>#7C3AED</strong></p>
+      <p style="color: #6c757d; font-size: 14px; margin-top: 10px;">Click Light/Dark on each card to see logo variations</p>
+    </div>
+  </div>
+
+  <script>
+    function toggleBg(button, variant) {
+      const card = button.closest('.logo-card');
+      const display = card.querySelector('.logo-display');
+
+      // Update display background
+      display.className = `logo-display ${variant}`;
+
+      // Update button states
+      card.querySelectorAll('.variation-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      button.classList.add('active');
+    }
+  </script>
+</body>
+</html>

@@ -15,6 +15,7 @@ class ProjectTimelineWidget extends StatelessWidget {
   final Map<String, dynamic> projectData;
   final String userRole; // "contractor" or "client"
   final bool showProgressHeader; // Show progress bar at top
+  final Function(String milestoneId, String milestoneName)? onAddPhotoUpdate; // Callback for photo upload
 
   const ProjectTimelineWidget({
     super.key,
@@ -22,6 +23,7 @@ class ProjectTimelineWidget extends StatelessWidget {
     required this.projectData,
     required this.userRole,
     this.showProgressHeader = true,
+    this.onAddPhotoUpdate,
   });
 
   Color _getStatusColor(String status) {
@@ -93,6 +95,13 @@ class ProjectTimelineWidget extends StatelessWidget {
         milestoneName: milestoneName,
       ),
     );
+  }
+
+  void _addPhotoUpdate(BuildContext context, String milestoneId, String milestoneName) {
+    // Trigger photo upload with preselected milestone via callback
+    if (onAddPhotoUpdate != null) {
+      onAddPhotoUpdate!(milestoneId, milestoneName);
+    }
   }
 
   Future<void> _markComplete(BuildContext context, String milestoneId) async {
@@ -546,24 +555,32 @@ class ProjectTimelineWidget extends StatelessWidget {
                       else if (milestone.status == 'in_progress')
                         Column(
                           children: [
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: () => _addUpdate(context, milestone.milestoneId, milestone.name),
-                                icon: const Icon(Icons.add_comment),
-                                label: const Text('Add Update'),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
+                            // Primary action: Add Photo Update
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
+                                onPressed: () => _addPhotoUpdate(context, milestone.milestoneId, milestone.name),
+                                icon: const Icon(Icons.add_a_photo),
+                                label: const Text('Add Photo Update'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Secondary action: Mark Complete
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
                                 onPressed: () => _markComplete(context, milestone.milestoneId),
                                 icon: const Icon(Icons.check),
                                 label: const Text('Mark Complete'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.green,
+                                  side: const BorderSide(color: Colors.green),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
                                 ),
                               ),
                             ),

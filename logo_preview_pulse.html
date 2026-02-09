@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProjectPulse Logo Concepts - Pulse Edition</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      color: #2D3748;
+      margin-bottom: 10px;
+      font-size: 36px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #6c757d;
+      margin-bottom: 40px;
+      font-size: 18px;
+    }
+
+    .logo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+
+    .logo-card {
+      background: white;
+      border-radius: 12px;
+      padding: 40px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .logo-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .logo-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #2D3748;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .logo-display {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 250px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      padding: 30px;
+    }
+
+    .logo-display.dark {
+      background: #2D3748;
+    }
+
+    .logo-variations {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .variation-btn {
+      padding: 10px 20px;
+      background: #e9ecef;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #495057;
+      transition: all 0.2s;
+    }
+
+    .variation-btn:hover {
+      background: #dee2e6;
+    }
+
+    .variation-btn.active {
+      background: #FF6B35;
+      color: white;
+    }
+
+    .notes {
+      text-align: center;
+      color: #6c757d;
+      font-size: 15px;
+      margin-top: 15px;
+      line-height: 1.5;
+    }
+
+    .color-info {
+      text-align: center;
+      margin-top: 40px;
+      padding: 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🏗️ ProjectPulse Logo Concepts</h1>
+    <p class="subtitle">Creative pulse-inspired designs</p>
+
+    <div class="logo-grid">
+
+      <!-- Logo 1: Circular Pulse Waves -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 1: "Pulse Ripple"</div>
+        <div class="logo-display" data-logo="1">
+          <svg width="200" height="200" viewBox="0 0 200 200">
+            <defs>
+              <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+
+            <!-- Outer concentric circles representing pulse waves -->
+            <circle cx="100" cy="100" r="85" stroke="url(#grad1)" stroke-width="3" fill="none" opacity="0.2"/>
+            <circle cx="100" cy="100" r="70" stroke="url(#grad1)" stroke-width="3" fill="none" opacity="0.35"/>
+            <circle cx="100" cy="100" r="55" stroke="url(#grad1)" stroke-width="3" fill="none" opacity="0.5"/>
+
+            <!-- Center pulse line forming abstract shape -->
+            <path d="M 40 100 L 55 100 L 62 75 L 70 125 L 78 85 L 86 100 L 100 100"
+                  stroke="url(#grad1)" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M 100 100 L 114 100 L 122 85 L 130 125 L 138 75 L 145 100 L 160 100"
+                  stroke="url(#grad1)" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+            <!-- Pulsing core -->
+            <circle cx="100" cy="100" r="12" fill="#FF6B35"/>
+            <circle cx="100" cy="100" r="7" fill="white"/>
+            <circle cx="100" cy="100" r="3" fill="#FF6B35"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Pulse waves emanating from central core - energy radiating outward like project updates spreading to clients</p>
+      </div>
+
+      <!-- Logo 2: Angular Pulse Beat -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 2: "Beat Signal"</div>
+        <div class="logo-display" data-logo="2">
+          <svg width="220" height="160" viewBox="0 0 220 160">
+            <defs>
+              <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="60%" style="stop-color:#FF6B35;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:0.7" />
+              </linearGradient>
+            </defs>
+
+            <!-- Bold pulse line with sharp peaks -->
+            <path d="M 10 80 L 35 80 L 50 40 L 65 120 L 80 50 L 95 110 L 110 80 L 145 80"
+                  stroke="url(#grad2)" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+            <!-- Building shape integrated into pulse -->
+            <rect x="145" y="55" width="25" height="50" rx="3" fill="#FF6B35" opacity="0.3"/>
+            <rect x="173" y="40" width="25" height="65" rx="3" fill="url(#grad2)" opacity="0.5"/>
+            <rect x="145" y="95" width="53" height="10" rx="2" fill="#2D3748" opacity="0.2"/>
+
+            <!-- Accent dots showing rhythm -->
+            <circle cx="50" cy="25" r="5" fill="#7C3AED" opacity="0.6"/>
+            <circle cx="80" cy="35" r="4" fill="#FF6B35" opacity="0.5"/>
+            <circle cx="95" cy="125" r="4" fill="#7C3AED" opacity="0.4"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Sharp, energetic pulse transitioning into building structure - representing the heartbeat of construction projects</p>
+      </div>
+
+      <!-- Logo 3: Circular Badge with Pulse -->
+      <div class="logo-card">
+        <div class="logo-title">Concept 3: "Pulse Badge"</div>
+        <div class="logo-display" data-logo="3">
+          <svg width="180" height="180" viewBox="0 0 180 180">
+            <defs>
+              <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+              <linearGradient id="grad3b" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF6B35;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+
+            <!-- Circular badge background -->
+            <circle cx="90" cy="90" r="75" fill="url(#grad3)"/>
+
+            <!-- White pulse line across badge -->
+            <path d="M 25 90 L 45 90 L 52 65 L 60 115 L 68 75 L 76 90"
+                  stroke="white" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+            <path d="M 104 90 L 112 75 L 120 115 L 128 65 L 135 90 L 155 90"
+                  stroke="white" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+
+            <!-- Central P letterform integrated into pulse -->
+            <rect x="76" y="60" width="8" height="50" rx="2" fill="white"/>
+            <circle cx="90" cy="75" r="10" fill="white"/>
+            <circle cx="90" cy="75" r="6" fill="url(#grad3)"/>
+
+            <!-- Corner accent shapes -->
+            <path d="M 90 15 L 85 25 L 95 25 Z" fill="white" opacity="0.3"/>
+            <path d="M 155 90 L 145 85 L 145 95 Z" fill="white" opacity="0.3"/>
+            <path d="M 90 165 L 95 155 L 85 155 Z" fill="white" opacity="0.3"/>
+            <path d="M 25 90 L 35 95 L 35 85 Z" fill="white" opacity="0.3"/>
+          </svg>
+        </div>
+        <div class="logo-variations">
+          <button class="variation-btn active" onclick="toggleBg(this, 'light')">Light</button>
+          <button class="variation-btn" onclick="toggleBg(this, 'dark')">Dark</button>
+        </div>
+        <p class="notes">Unified circular badge with pulse line bisecting through center - professional seal-like quality perfect for contractor credibility</p>
+      </div>
+
+    </div>
+
+    <div class="color-info">
+      <h3 style="color: #2D3748; margin-bottom: 10px;">Color Palette</h3>
+      <p style="color: #6c757d;">Orange: <strong>#FF6B35</strong> | Purple: <strong>#7C3AED</strong></p>
+      <p style="color: #6c757d; font-size: 14px; margin-top: 10px;">Click Light/Dark on each card to see logo variations</p>
+    </div>
+  </div>
+
+  <script>
+    function toggleBg(button, variant) {
+      const card = button.closest('.logo-card');
+      const display = card.querySelector('.logo-display');
+
+      // Update display background
+      display.className = `logo-display ${variant}`;
+
+      // Update button states
+      card.querySelectorAll('.variation-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      button.classList.add('active');
+    }
+  </script>
+</body>
+</html>
