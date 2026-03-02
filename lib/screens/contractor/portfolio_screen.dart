@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
@@ -151,10 +152,10 @@ class _PortfolioProjectCard extends StatelessWidget {
                     width: double.infinity,
                     color: Colors.grey[200],
                     child: firstPhotoUrl != null
-                        ? Image.network(
-                            firstPhotoUrl,
+                        ? CachedNetworkImage(
+                            imageUrl: firstPhotoUrl,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
+                            errorWidget: (context, url, error) {
                               return Icon(
                                 Icons.image_not_supported,
                                 size: 50,
@@ -351,10 +352,10 @@ class _ProjectDetailsDialog extends StatelessWidget {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: photoUrl != null
-                              ? Image.network(
-                                  photoUrl,
+                              ? CachedNetworkImage(
+                                  imageUrl: photoUrl,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
+                                  errorWidget: (context, url, error) {
                                     return Container(
                                       color: Colors.grey[200],
                                       child: Icon(
@@ -455,10 +456,10 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
               Expanded(
                 child: Center(
                   child: photoUrl != null
-                      ? Image.network(
-                          photoUrl,
+                      ? CachedNetworkImage(
+                          imageUrl: photoUrl,
                           fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
+                          errorWidget: (context, url, error) {
                             return const Icon(
                               Icons.broken_image,
                               size: 100,

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 import 'create_milestones_screen.dart';
-import 'send_invitation_screen.dart';
 
 class CreateProjectScreen extends StatefulWidget {
   const CreateProjectScreen({super.key});
@@ -24,6 +23,77 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   DateTime _startDate = DateTime.now();
   DateTime _estimatedEndDate = DateTime.now().add(const Duration(days: 14));
   bool _isLoading = false;
+
+  String? _teamId;
+  List<Map<String, dynamic>> _teamMembers = [];
+  List<Map<String, dynamic>> _subcontractors = [];
+  final Set<String> _selectedMemberUids = {};
+  final Set<String> _selectedSubIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTeamData();
+  }
+
+  Future<void> _loadTeamData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final teamId = userDoc.data()?['team_id'] as String?;
+      if (teamId == null || !mounted) return;
+
+      _teamId = teamId;
+
+      final membersSnap = await FirebaseFirestore.instance
+          .collection('teams')
+          .doc(teamId)
+          .collection('members')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      final subsSnap = await FirebaseFirestore.instance
+          .collection('teams')
+          .doc(teamId)
+          .collection('subcontractors')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _teamMembers = membersSnap.docs
+              .where((d) => d.id != user.uid)
+              .map((d) => {
+                    'uid': d.data()['user_uid'] as String? ?? d.id,
+                    'name': d.data()['name'] as String? ?? 'Unknown',
+                    'role': d.data()['role'] as String? ?? 'worker',
+                  })
+              .toList();
+          _subcontractors = subsSnap.docs
+              .map((d) => {
+                    'id': d.id,
+                    'company_name':
+                        d.data()['company_name'] as String? ?? 'Unknown',
+                    'trade': d.data()['trade'] as String? ?? 'other',
+                  })
+              .toList();
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load team data. Crew/sub assignment may be unavailable.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -58,119 +128,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     }
   }
 
-  Future<void> _showInviteDialog(String projectId, String projectName, String clientName) async {
-    // Using Firebase Hosting URL until custom domain is configured
-    final inviteLink = 'https://projectpulse-7d258.web.app/join/$projectId';
-
-    // TODO: Automatic Invitation System
-    // Since we have client email and phone from project creation, we can automatically send invitations:
-    //
-    // Option 1: Firebase Cloud Function to send SMS via Twilio
-    // - Install Twilio SDK in Cloud Functions
-    // - Create sendProjectInviteSMS function
-    // - Triggered when project is created with client_phone
-    // - Cost: ~$0.0075 per SMS
-    //
-    // Option 2: Firebase Cloud Function to send Email via SendGrid
-    // - Install SendGrid SDK in Cloud Functions
-    // - Create sendProjectInviteEmail function
-    // - Triggered when project is created with client_email
-    // - Cost: Free for first 100/day, then $0.0001 per email
-    //
-    // Implementation:
-    // 1. Add Twilio/SendGrid credentials to Firebase Config
-    // 2. Create Cloud Function that triggers on project creation
-    // 3. Function reads client_email and client_phone from project doc
-    // 4. Sends formatted invitation via both channels
-    // 5. Logs delivery status back to project doc
-    //
-    // Benefits:
-    // - No manual sharing required
-    // - Professional branded emails
-    // - Immediate delivery
-    // - Client gets invitation before contractor even leaves the screen
-    //
-    // For now, showing manual share dialog as fallback
-
-    final message = '''
-Hey $clientName! 👋
-
-I've created a project for you in ProjectPulse: "$projectName"
-
-Click this link to view real-time updates, photos, and communicate about your project:
-$inviteLink
-
-Looking forward to working with you!
-''';
-
-    return showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Email Sent!'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green[600], size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Invitation email automatically sent to $clientName',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[700], fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            Text(
-              'Want to share via text too? Copy this link:',
-              style: const TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: SelectableText(
-                inviteLink,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.blue[700],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Later'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Share.share(message, subject: 'You\'ve been invited to view your project: $projectName');
-              Navigator.pop(context);
-            },
-            icon: const Icon(Icons.share),
-            label: const Text('Share Now'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _createProject() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -184,6 +141,7 @@ Looking forward to working with you!
       final userDoc = await userRef.get();
       final userData = userDoc.data() as Map<String, dynamic>?;
       final contractorBusinessName = userData?['contractor_profile']?['business_name'] ?? 'Contractor';
+      final teamId = userData?['team_id'] as String?;
 
       final projectCost = double.tryParse(_originalCostController.text.trim()) ?? 0;
 
@@ -191,6 +149,9 @@ Looking forward to working with you!
         'contractor_ref': userRef,
         'contractor_uid': user.uid, // Add UID string for easier querying
         'contractor_business_name': contractorBusinessName, // Add business name for client display
+        'team_id': teamId, // For team member access
+        'assigned_member_uids': _selectedMemberUids.toList(),
+        'assigned_sub_ids': _selectedSubIds.toList(),
         'project_name': _projectNameController.text.trim(),
         'client_name': _clientNameController.text.trim(),
         'client_email': _clientEmailController.text.trim(),
@@ -211,9 +172,35 @@ Looking forward to working with you!
 
       final projectDoc = await FirebaseFirestore.instance.collection('projects').add(projectData);
 
-      if (mounted) {
-        // Navigate to milestone creation screen
-        final milestonesResult = await Navigator.push(
+      if (!mounted) return;
+
+      // Ask if user wants to add milestones
+      bool milestonesResult = false;
+      final addMilestones = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Project Created!'),
+          content: const Text('Would you like to set up milestones now? You can always add them later.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text("I'll add later"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Add Milestones'),
+            ),
+          ],
+        ),
+      );
+
+      if (addMilestones == true && mounted) {
+        milestonesResult = await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => CreateMilestonesScreen(
@@ -221,46 +208,101 @@ Looking forward to working with you!
               projectAmount: projectCost,
             ),
           ),
-        );
+        ) == true;
+      }
 
-        // Get contractor name for invitation screen
-        final userData = await userRef.get();
-        final contractorData = userData.data() as Map<String, dynamic>?;
-        final contractorName = contractorData?['contractor_profile']?['business_name'] ?? 'Your contractor';
+      if (!mounted) return;
 
-        // Navigate to invitation screen
-        if (mounted) {
-          final invitationSent = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SendInvitationScreen(
-                projectId: projectDoc.id,
-                projectName: _projectNameController.text.trim(),
-                clientName: _clientNameController.text.trim(),
-                clientEmail: _clientEmailController.text.trim(),
-                contractorName: contractorName,
-              ),
+      // Show invitation as bottom sheet
+      final invitationSent = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (ctx) {
+          final inviteLink = 'https://projectpulsehub.com/join/${projectDoc.id}';
+          final clientName = _clientNameController.text.trim();
+          final clientEmail = _clientEmailController.text.trim();
+          return Padding(
+            padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.mail_outline, size: 40, color: Color(0xFF2D3748)),
+                const SizedBox(height: 12),
+                Text('Invite $clientName?', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(clientEmail, style: TextStyle(color: Colors.grey[600])),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await FirebaseFirestore.instance
+                          .collection('projects')
+                          .doc(projectDoc.id)
+                          .update({
+                        'invitation_ready': true,
+                        'invitation_requested_at': FieldValue.serverTimestamp(),
+                      });
+                      if (ctx.mounted) Navigator.pop(ctx, true);
+                    },
+                    icon: const Icon(Icons.email),
+                    label: const Text('Send Email'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: inviteLink));
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(content: Text('Link copied!')),
+                          );
+                        },
+                        icon: const Icon(Icons.copy, size: 16),
+                        label: const Text('Copy Link'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Later'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           );
+        },
+      ) ?? false;
 
-          // Go back to contractor home
-          if (mounted) {
-            Navigator.pop(context, true); // Return true to indicate success
+      // Go back to contractor home
+      if (mounted) {
+        Navigator.pop(context, true);
 
-            String message = 'Project created';
-            if (milestonesResult == true) {
-              message += ' with milestones';
-            }
-            if (invitationSent == true) {
-              message += ' and invitation sent';
-            }
-            message += '!';
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(message)),
-            );
-          }
+        String message = 'Project created';
+        if (milestonesResult) {
+          message += ' with milestones';
         }
+        if (invitationSent) {
+          message += ' and invitation sent';
+        }
+        message += '!';
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -534,6 +576,107 @@ Looking forward to working with you!
                   ],
                 ),
               ),
+              // Assign Team Members
+              if (_teamMembers.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Assign Crew',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Optional — you can also assign later',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _teamMembers.map((member) {
+                    final uid = member['uid'] as String;
+                    final isSelected = _selectedMemberUids.contains(uid);
+                    final role = member['role'] as String;
+                    return FilterChip(
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(member['name'] as String),
+                          if (role == 'foreman') ...[
+                            const SizedBox(width: 4),
+                            Icon(Icons.star, size: 14,
+                                color: isSelected ? Colors.white : Colors.orange[700]),
+                          ],
+                        ],
+                      ),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedMemberUids.add(uid);
+                          } else {
+                            _selectedMemberUids.remove(uid);
+                          }
+                        });
+                      },
+                      avatar: Icon(Icons.person, size: 18,
+                          color: isSelected ? Colors.white : Colors.grey[600]),
+                      selectedColor: Theme.of(context).colorScheme.primary,
+                      checkmarkColor: Colors.white,
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : Colors.grey[800],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+
+              // Assign Subcontractors
+              if (_subcontractors.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Assign Subs',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Optional — you can also assign later',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _subcontractors.map((sub) {
+                    final id = sub['id'] as String;
+                    final isSelected = _selectedSubIds.contains(id);
+                    return FilterChip(
+                      label: Text(sub['company_name'] as String),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedSubIds.add(id);
+                          } else {
+                            _selectedSubIds.remove(id);
+                          }
+                        });
+                      },
+                      avatar: Icon(Icons.engineering, size: 18,
+                          color: isSelected ? Colors.white : Colors.grey[600]),
+                      selectedColor: const Color(0xFFFF6B35),
+                      checkmarkColor: Colors.white,
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : Colors.grey[800],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+
               const SizedBox(height: 32),
 
               // Create button
@@ -559,7 +702,7 @@ Looking forward to working with you!
                           ),
                         )
                       : const Text(
-                          'Next: Set Up Milestones',
+                          'Create Project',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,

@@ -2,6 +2,8 @@
     <!-- Internet permissions for Firebase -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Push notifications (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
         android:label="ProjectPulse"
@@ -38,16 +40,31 @@
                 <data android:scheme="projectpulse" android:host="join" />
             </intent-filter>
 
+            <!-- Deep linking for team invite custom scheme -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- projectpulse://team/{teamId}/invite/{memberId} -->
+                <data android:scheme="projectpulse" android:host="team" />
+            </intent-filter>
+
             <!-- App Links (verified HTTPS links) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <!-- https://projectpulse-7d258.web.app/join/{projectId} -->
+                <!-- Custom domain -->
+                <data android:scheme="https"
+                      android:host="projectpulsehub.com"
+                      android:pathPrefix="/join" />
+                <data android:scheme="https"
+                      android:host="projectpulsehub.com"
+                      android:pathPrefix="/team" />
+                <!-- Firebase hosting fallback -->
                 <data android:scheme="https"
                       android:host="projectpulse-7d258.web.app"
                       android:pathPrefix="/join" />
-                <!-- https://projectpulse-7d258.firebaseapp.com/join/{projectId} -->
                 <data android:scheme="https"
                       android:host="projectpulse-7d258.firebaseapp.com"
                       android:pathPrefix="/join" />
@@ -68,6 +85,10 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
         </intent>
     </queries>
 </manifest>

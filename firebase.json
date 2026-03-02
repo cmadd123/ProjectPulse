@@ -2,22 +2,26 @@
   "functions": {
     "source": "functions",
     "predeploy": [],
-    "runtime": "nodejs20"
+    "runtime": "nodejs22"
   },
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "public": "build/web",
+    "public": "hosting",
     "ignore": [
       "firebase.json",
       "**/node_modules/**"
     ],
     "rewrites": [
       {
+        "source": "/join/**",
+        "destination": "/join.html"
+      },
+      {
         "source": "**",
-        "destination": "/index.html"
+        "destination": "/join.html"
       }
     ],
     "headers": [

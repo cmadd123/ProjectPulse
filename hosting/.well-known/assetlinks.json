@@ -1,0 +1,9 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.consciousapps.projectpulse",
+    "sha256_cert_fingerprints":
+    ["21:F1:ED:CB:C8:A6:43:95:D8:B1:F2:62:29:B1:C7:87:33:1A:A4:0A:B1:B3:D5:B1:45:59:6E:7D:ED:E2:15:F5"]
+  }
+}]

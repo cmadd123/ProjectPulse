@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../services/notification_service.dart';
 
 class CreateChangeOrderScreen extends StatefulWidget {
   final String projectId;
@@ -49,6 +50,20 @@ class _CreateChangeOrderScreenState extends State<CreateChangeOrderScreen> {
         'responded_at': null,
         'responded_by_ref': null,
       });
+
+      // Notify client about the new change order
+      final projectDoc = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId)
+          .get();
+      final projectName = projectDoc.data()?['project_name'] ?? 'Project';
+
+      NotificationService.sendChangeOrderNotification(
+        projectId: widget.projectId,
+        projectName: projectName,
+        description: _descriptionController.text.trim(),
+        costChange: costChange,
+      );
 
       if (mounted) {
         Navigator.pop(context, true);

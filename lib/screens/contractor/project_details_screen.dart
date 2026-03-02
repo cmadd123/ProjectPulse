@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -12,8 +13,16 @@ import 'manage_milestones_screen.dart';
 import 'edit_milestones_screen.dart';
 import '../shared/project_chat_screen.dart';
 import '../client/enhanced_photo_timeline.dart';
+import '../../services/notification_service.dart';
 import '../../components/project_timeline_widget.dart';
 import '../../services/notification_service.dart';
+import '../../components/expenses_tab_widget.dart';
+import '../../components/add_expense_bottom_sheet.dart';
+import '../../components/documents_tab_widget.dart';
+import '../../components/time_tab_widget.dart';
+import 'project_team_screen.dart';
+import '../client/client_project_timeline.dart';
+import '../../services/invoice_service.dart';
 
 class ProjectDetailsScreen extends StatefulWidget {
   final String projectId;
@@ -62,27 +71,15 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
         };
       }).toList();
 
-      print('DEBUG: Loaded ${_milestones.length} milestones');
-      for (var m in _milestones) {
-        print('  - ${m['name']}: ${m['status']}');
-      }
-
       // Smart default: Pre-select the first "in_progress" milestone
       final inProgressMilestones = _milestones.where((m) => m['status'] == 'in_progress').toList();
-      print('DEBUG: Found ${inProgressMilestones.length} in-progress milestones');
 
       if (inProgressMilestones.length == 1) {
         _selectedMilestone = inProgressMilestones[0]['ref'] as DocumentReference;
-        print('DEBUG: Auto-selected: ${inProgressMilestones[0]['name']}');
       } else if (inProgressMilestones.length > 1) {
-        // If multiple in-progress, select the most recently posted to
-        // For now, just select the first one (we can enhance this later)
         _selectedMilestone = inProgressMilestones[0]['ref'] as DocumentReference;
-        print('DEBUG: Multiple in-progress, selected first: ${inProgressMilestones[0]['name']}');
       } else {
-        // No in-progress milestones - reset to null so dropdown shows hint
         _selectedMilestone = null;
-        print('DEBUG: No in-progress milestones, dropdown will show all (starting with null)');
       }
     });
   }
@@ -123,6 +120,156 @@ Looking forward to working with you!
         content: Text('Invite link shared!'),
         backgroundColor: Colors.green,
         duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _showAssignTeamDialog() async {
+    final user = FirebaseAuth.instance.currentUser!;
+    final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final teamId = (userDoc.data() as Map<String, dynamic>?)?['team_id'] as String?;
+
+    if (teamId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No team found. Set up your team first.')),
+        );
+      }
+      return;
+    }
+
+    // Get current assigned members
+    final projectDoc = await FirebaseFirestore.instance
+        .collection('projects')
+        .doc(widget.projectId)
+        .get();
+    final currentAssigned = List<String>.from(
+      (projectDoc.data()?['assigned_member_uids'] as List<dynamic>?) ?? [],
+    );
+
+    // Get team members (exclude owner)
+    final membersSnapshot = await FirebaseFirestore.instance
+        .collection('teams')
+        .doc(teamId)
+        .collection('members')
+        .where('status', isEqualTo: 'active')
+        .get();
+
+    final members = membersSnapshot.docs
+        .where((doc) => doc.data()['role'] != 'owner')
+        .map((doc) => {
+              'id': doc.id,
+              'name': doc.data()['name'] ?? 'Unknown',
+              'role': doc.data()['role'] ?? 'worker',
+              'user_uid': doc.data()['user_uid'] as String?,
+            })
+        .where((m) => m['user_uid'] != null) // Only show linked members
+        .toList();
+
+    if (members.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No active team members. Add members from the Team screen.')),
+        );
+      }
+      return;
+    }
+
+    // Track selected UIDs
+    final selected = Set<String>.from(currentAssigned);
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Assign Team Members'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: members.length,
+              itemBuilder: (ctx, index) {
+                final member = members[index];
+                final uid = member['user_uid'] as String;
+                final isSelected = selected.contains(uid);
+                final role = member['role'] as String;
+
+                return CheckboxListTile(
+                  value: isSelected,
+                  onChanged: (checked) {
+                    setDialogState(() {
+                      if (checked == true) {
+                        selected.add(uid);
+                      } else {
+                        selected.remove(uid);
+                      }
+                    });
+                  },
+                  title: Text(member['name'] as String),
+                  subtitle: Text(
+                    role == 'foreman' ? 'Foreman' : 'Worker',
+                    style: TextStyle(
+                      color: role == 'foreman' ? Colors.blue : Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                  secondary: CircleAvatar(
+                    backgroundColor: role == 'foreman'
+                        ? Colors.blue.withOpacity(0.15)
+                        : Colors.green.withOpacity(0.15),
+                    child: Icon(
+                      role == 'foreman' ? Icons.engineering : Icons.construction,
+                      color: role == 'foreman' ? Colors.blue : Colors.green,
+                      size: 20,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await FirebaseFirestore.instance
+                    .collection('projects')
+                    .doc(widget.projectId)
+                    .update({'assigned_member_uids': selected.toList()});
+
+                // Notify newly assigned members
+                final newlyAssigned = selected.difference(Set<String>.from(currentAssigned));
+                final projectName = widget.projectData['project_name'] as String? ?? 'Project';
+                for (final uid in newlyAssigned) {
+                  NotificationService.sendCrewAssignmentNotification(
+                    userUid: uid,
+                    projectId: widget.projectId,
+                    projectName: projectName,
+                  );
+                }
+
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${selected.length} team member${selected.length == 1 ? '' : 's'} assigned'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -408,18 +555,12 @@ Looking forward to working with you!
                                 ),
                               ];
 
-                              print('DEBUG DROPDOWN: Building dropdown with ${allItems.length} items');
-                              print('  - In-progress items: ${inProgressItems.length}');
-                              print('  - Other items: ${otherItems.length}');
-                              print('  - Selected value: ${validValue?.path ?? "null"}');
-
                               return DropdownButton<DocumentReference?>(
                                 value: validValue,
                                 isExpanded: true,
                                 hint: const Text('Select milestone'),
                                 items: allItems,
                                 onChanged: (value) {
-                                  print('DEBUG: Dropdown changed to: ${value?.path ?? "null (General/Other)"}');
                                   setState(() {
                                     _selectedMilestone = value;
                                   });
@@ -517,8 +658,6 @@ Looking forward to working with you!
       final downloadUrl = await storageRef.getDownloadURL();
 
       // Save update to Firestore
-      print('DEBUG: Posting update with milestone_ref: ${_selectedMilestone?.path ?? "null (General/Other)"}');
-
       await FirebaseFirestore.instance
           .collection('projects')
           .doc(widget.projectId)
@@ -528,6 +667,8 @@ Looking forward to working with you!
         'thumbnail_url': downloadUrl, // Use same for now, could create smaller version
         'caption': _captionController.text.trim(),
         'posted_by_ref': FirebaseFirestore.instance.collection('users').doc(user.uid),
+        'posted_by_name': user.displayName ?? 'Contractor',
+        'posted_by_role': 'contractor',
         'created_at': Timestamp.now(), // Use client timestamp instead of server timestamp to avoid orderBy null issue
         'milestone_ref': _selectedMilestone, // Can be null for "General/Other"
       });
@@ -628,12 +769,12 @@ Looking forward to working with you!
             borderRadius: const BorderRadius.vertical(
               top: Radius.circular(12),
             ),
-            child: Image.network(
-              data['photo_url'] ?? '',
+            child: CachedNetworkImage(
+              imageUrl: data['photo_url'] ?? '',
               width: double.infinity,
               height: 250,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
+              errorWidget: (context, url, error) {
                 return Container(
                   height: 250,
                   color: Colors.grey[200],
@@ -660,7 +801,7 @@ Looking forward to working with you!
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Photo Update',
+                      data['posted_by_name'] as String? ?? 'Photo Update',
                       style: TextStyle(
                         fontSize: 11,
                         color: Theme.of(context).colorScheme.primary,
@@ -668,6 +809,16 @@ Looking forward to working with you!
                         letterSpacing: 0.5,
                       ),
                     ),
+                    if (data['posted_by_role'] != null && data['posted_by_role'] != 'contractor') ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        data['posted_by_role'] == 'foreman' ? 'Foreman' : 'Worker',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
                     const Spacer(),
                     Text(
                       DateFormat('MMM d, h:mm a').format(date),
@@ -919,6 +1070,377 @@ Looking forward to working with you!
     }
   }
 
+  void _showDeleteProjectDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Project'),
+        content: Text(
+          'Are you sure you want to delete "${widget.projectData['project_name']}"?\n\n'
+          'This will permanently remove the project and all its milestones, updates, '
+          'change orders, and messages. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              await _deleteProject();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAssignSubsDialog() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser!;
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final teamId = userDoc.data()?['team_id'] as String?;
+      if (teamId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No team found. Create a team first.')),
+          );
+        }
+        return;
+      }
+
+      final subsSnapshot = await FirebaseFirestore.instance
+          .collection('teams')
+          .doc(teamId)
+          .collection('subcontractors')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      if (subsSnapshot.docs.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No subcontractors yet. Add some in My Team.')),
+          );
+        }
+        return;
+      }
+
+      final projectDoc = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId)
+          .get();
+      final currentAssigned = List<String>.from(
+          (projectDoc.data()?['assigned_sub_ids'] as List<dynamic>?) ?? []);
+
+      final selectedIds = Set<String>.from(currentAssigned);
+
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Assign Subcontractors'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView(
+                shrinkWrap: true,
+                children: subsSnapshot.docs.map((doc) {
+                  final data = doc.data();
+                  final companyName = data['company_name'] as String? ?? '';
+                  final trade = data['trade'] as String? ?? 'other';
+                  final isSelected = selectedIds.contains(doc.id);
+
+                  return CheckboxListTile(
+                    title: Text(companyName),
+                    subtitle: Text(trade[0].toUpperCase() + trade.substring(1)),
+                    value: isSelected,
+                    onChanged: (checked) {
+                      setDialogState(() {
+                        if (checked == true) {
+                          selectedIds.add(doc.id);
+                        } else {
+                          selectedIds.remove(doc.id);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  await FirebaseFirestore.instance
+                      .collection('projects')
+                      .doc(widget.projectId)
+                      .update({'assigned_sub_ids': selectedIds.toList()});
+                  if (context.mounted) Navigator.pop(context);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Subcontractors updated!')),
+                    );
+                  }
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteProject() async {
+    try {
+      final projectRef = FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId);
+
+      // Delete subcollections
+      final subcollections = ['milestones', 'updates', 'change_orders', 'messages', 'expenses', 'documents', 'time_entries'];
+      for (final subcollection in subcollections) {
+        final docs = await projectRef.collection(subcollection).get();
+        for (final doc in docs.docs) {
+          // For milestones, also delete their change_requests subcollection
+          if (subcollection == 'milestones') {
+            final changeRequests = await doc.reference.collection('change_requests').get();
+            for (final cr in changeRequests.docs) {
+              await cr.reference.delete();
+            }
+          }
+          await doc.reference.delete();
+        }
+      }
+
+      // Delete the project document itself
+      await projectRef.delete();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Project deleted'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pop(context); // Go back to project list
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting project: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildInvoicesTab() {
+    final currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId)
+          .collection('invoices')
+          .orderBy('created_at', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final invoices = snapshot.data?.docs ?? [];
+
+        if (invoices.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.receipt_long, size: 64, color: Colors.grey[300]),
+                  const SizedBox(height: 16),
+                  Text('No invoices yet',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Invoices are generated automatically when a client approves a milestone.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: invoices.length,
+          itemBuilder: (context, index) {
+            final data = invoices[index].data() as Map<String, dynamic>;
+            final invoiceId = invoices[index].id;
+            final status = data['status'] as String? ?? 'sent';
+            final amount = (data['amount'] as num?)?.toDouble() ?? 0;
+            final totalDue = (data['total_due'] as num?)?.toDouble() ?? amount;
+            final milestoneName = data['milestone_name'] as String? ?? '';
+            final invoiceNumber = data['invoice_number'] as String? ?? '';
+            final createdAt = (data['created_at'] as Timestamp?)?.toDate();
+            final paidAt = (data['paid_at'] as Timestamp?)?.toDate();
+            final pdfUrl = data['pdf_url'] as String?;
+            final isPaid = status == 'paid';
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            invoiceNumber,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isPaid ? Colors.green[50] : Colors.orange[50],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            isPaid ? 'Paid' : 'Sent',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isPaid ? Colors.green[700] : Colors.orange[700],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(milestoneName, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text(
+                          currencyFormat.format(totalDue),
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        if (createdAt != null)
+                          Text(
+                            DateFormat('MMM d, yyyy').format(createdAt),
+                            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                          ),
+                      ],
+                    ),
+                    if (isPaid && paidAt != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Paid on ${DateFormat('MMM d, yyyy').format(paidAt)}',
+                        style: TextStyle(fontSize: 12, color: Colors.green[600]),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        if (pdfUrl != null)
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                await Share.shareXFiles(
+                                  [],
+                                  text: 'Invoice $invoiceNumber: $pdfUrl',
+                                  subject: 'Invoice $invoiceNumber',
+                                );
+                              },
+                              icon: const Icon(Icons.share, size: 16),
+                              label: const Text('Share'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                        if (pdfUrl != null && !isPaid)
+                          const SizedBox(width: 8),
+                        if (!isPaid)
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Mark as Paid?'),
+                                    content: Text('Mark invoice $invoiceNumber as paid?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                        child: const Text('Mark Paid'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirmed == true) {
+                                  await InvoiceService.markAsPaid(widget.projectId, invoiceId);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Invoice marked as paid!'), backgroundColor: Colors.green),
+                                    );
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.check, size: 16),
+                              label: const Text('Mark Paid'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('MMM d, yyyy');
@@ -927,6 +1449,8 @@ Looking forward to working with you!
       extendBody: false,
       appBar: AppBar(
         title: Text(widget.projectData['project_name'] ?? 'Project'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.photo_library),
@@ -958,9 +1482,35 @@ Looking forward to working with you!
               );
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.visibility),
+            tooltip: 'Client View',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ClientProjectTimeline(
+                    projectId: widget.projectId,
+                    projectData: widget.projectData,
+                    isPreview: true,
+                  ),
+                ),
+              );
+            },
+          ),
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'change_order') {
+              if (value == 'manage_team') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProjectTeamScreen(
+                      projectId: widget.projectId,
+                      projectData: widget.projectData,
+                    ),
+                  ),
+                );
+              } else if (value == 'change_order') {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -969,6 +1519,30 @@ Looking forward to working with you!
                     ),
                   ),
                 );
+              } else if (value == 'add_expense') {
+                final user = FirebaseAuth.instance.currentUser!;
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => Padding(
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).viewInsets.bottom,
+                    ),
+                    child: AddExpenseBottomSheet(
+                      projectId: widget.projectId,
+                      enteredByUid: user.uid,
+                      enteredByName: user.displayName ?? 'Contractor',
+                      enteredByRole: 'contractor',
+                    ),
+                  ),
+                ).then((result) {
+                  if (result == true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Expense saved!')),
+                    );
+                  }
+                });
               } else if (value == 'milestones') {
                 Navigator.push(
                   context,
@@ -991,9 +1565,21 @@ Looking forward to working with you!
                 );
               } else if (value == 'complete') {
                 _showCompleteProjectDialog();
+              } else if (value == 'delete') {
+                _showDeleteProjectDialog();
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'manage_team',
+                child: Row(
+                  children: [
+                    Icon(Icons.groups),
+                    SizedBox(width: 12),
+                    Text('Manage Team'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'change_order',
                 child: Row(
@@ -1001,6 +1587,16 @@ Looking forward to working with you!
                     Icon(Icons.request_quote),
                     SizedBox(width: 12),
                     Text('Create Change Order'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'add_expense',
+                child: Row(
+                  children: [
+                    Icon(Icons.receipt_long),
+                    SizedBox(width: 12),
+                    Text('Add Expense'),
                   ],
                 ),
               ),
@@ -1031,6 +1627,17 @@ Looking forward to working with you!
                     Icon(Icons.check_circle, color: Colors.green),
                     SizedBox(width: 12),
                     Text('Mark Complete'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_forever, color: Colors.red),
+                    SizedBox(width: 12),
+                    Text('Delete Project', style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -1111,6 +1718,76 @@ Looking forward to working with you!
                     ),
                   ],
                 ),
+                // Assigned crew chips
+                Builder(
+                  builder: (context) {
+                    final assignedUids = (widget.projectData['assigned_member_uids'] as List?)?.cast<String>() ?? [];
+                    if (assignedUids.isEmpty) return const SizedBox.shrink();
+                    final teamId = widget.projectData['team_id'] as String?;
+                    if (teamId == null) return const SizedBox.shrink();
+                    return StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('teams')
+                          .doc(teamId)
+                          .collection('members')
+                          .snapshots(),
+                      builder: (context, snap) {
+                        if (!snap.hasData) return const SizedBox.shrink();
+                        final members = snap.data!.docs
+                            .where((d) {
+                              final data = d.data() as Map<String, dynamic>;
+                              final uid = data['user_uid'] as String?;
+                              return uid != null && assignedUids.contains(uid);
+                            })
+                            .map((d) => d.data() as Map<String, dynamic>)
+                            .toList();
+                        if (members.isEmpty) return const SizedBox.shrink();
+                        return GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ProjectTeamScreen(
+                                projectId: widget.projectId,
+                                projectData: widget.projectData,
+                              ),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                Icon(Icons.groups, size: 16, color: Colors.grey[500]),
+                                const SizedBox(width: 2),
+                                ...members.map((m) {
+                                  final role = m['role'] as String? ?? 'worker';
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: role == 'foreman'
+                                          ? Colors.blue.withOpacity(0.1)
+                                          : Colors.green.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '${m['name'] ?? 'Unknown'}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: role == 'foreman' ? Colors.blue[700] : Colors.green[700],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -1118,18 +1795,24 @@ Looking forward to working with you!
           // Timeline View with Activity Tab
           Expanded(
             child: DefaultTabController(
-              length: 2,
+              length: 6,
               child: Column(
                 children: [
                   Container(
                     color: Colors.white,
                     child: TabBar(
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.center,
                       labelColor: Theme.of(context).colorScheme.primary,
                       unselectedLabelColor: Colors.grey,
                       indicatorColor: Theme.of(context).colorScheme.primary,
                       tabs: const [
                         Tab(text: 'Milestones'),
                         Tab(text: 'Activity'),
+                        Tab(text: 'Expenses'),
+                        Tab(text: 'Docs'),
+                        Tab(text: 'Time'),
+                        Tab(text: 'Invoices'),
                       ],
                     ),
                   ),
@@ -1285,6 +1968,34 @@ Looking forward to working with you!
                             );
                           },
                         ),
+                        // Tab 3: Expenses
+                        ExpensesTabWidget(
+                          projectId: widget.projectId,
+                          canAddExpense: true,
+                          currentUserUid: FirebaseAuth.instance.currentUser?.uid,
+                          currentUserName: FirebaseAuth.instance.currentUser?.displayName ?? 'Contractor',
+                          currentUserRole: 'contractor',
+                        ),
+                        // Tab 4: Documents
+                        DocumentsTabWidget(
+                          projectId: widget.projectId,
+                          canManage: true,
+                          currentUserUid: FirebaseAuth.instance.currentUser?.uid,
+                          currentUserName: FirebaseAuth.instance.currentUser?.displayName ?? 'Contractor',
+                          currentUserRole: 'contractor',
+                          teamId: widget.projectData['team_id'] as String?,
+                        ),
+                        // Tab 5: Time
+                        TimeTabWidget(
+                          projectId: widget.projectId,
+                          canLogTime: true,
+                          currentUserUid: FirebaseAuth.instance.currentUser?.uid,
+                          currentUserName: FirebaseAuth.instance.currentUser?.displayName ?? 'Contractor',
+                          currentUserRole: 'contractor',
+                          teamId: widget.projectData['team_id'] as String?,
+                        ),
+                        // Tab 6: Invoices
+                        _buildInvoicesTab(),
                       ],
                     ),
                   ),
@@ -1364,14 +2075,6 @@ Looking forward to working with you!
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          FloatingActionButton(
-            heroTag: 'share',
-            onPressed: () => _shareProjectInvite(context),
-            backgroundColor: Colors.green,
-            tooltip: 'Share Invite Link',
-            child: const Icon(Icons.share),
-          ),
-          const SizedBox(height: 12),
           FloatingActionButton(
             heroTag: 'camera',
             onPressed: _takePicture,

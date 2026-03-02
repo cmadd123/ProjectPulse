@@ -71,7 +71,6 @@ class _SendInvitationScreenState extends State<SendInvitationScreen> {
       });
     } catch (e) {
       setState(() => _isLoadingMilestones = false);
-      print('Error loading milestones: $e');
     }
   }
 
@@ -93,12 +92,6 @@ class _SendInvitationScreenState extends State<SendInvitationScreen> {
         _isSending = false;
         _invitationSent = true;
       });
-
-      // Wait a moment to show success, then return
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) {
-        Navigator.pop(context, true); // Return success
-      }
     } catch (e) {
       setState(() => _isSending = false);
       if (mounted) {
@@ -138,7 +131,7 @@ class _SendInvitationScreenState extends State<SendInvitationScreen> {
     // Get client phone (if exists)
     final clientPhone = _projectData!['client_phone'] as String? ?? '';
 
-    final inviteLink = 'https://projectpulse-7d258.web.app/join/${widget.projectId}';
+    final inviteLink = 'https://projectpulsehub.com/join/${widget.projectId}';
 
     // Build SMS message
     final smsMessage = '''Hi ${widget.clientName}! Here's the plan for your ${widget.projectName}:
@@ -192,7 +185,7 @@ Reply YES to accept and I'll order materials!''';
 
   @override
   Widget build(BuildContext context) {
-    final inviteLink = 'https://projectpulse-7d258.web.app/join/${widget.projectId}';
+    final inviteLink = 'https://projectpulsehub.com/join/${widget.projectId}';
 
     return Scaffold(
       appBar: AppBar(
@@ -506,7 +499,7 @@ Reply YES to accept and I'll order materials!''';
             ),
             const SizedBox(height: 32),
 
-            // Send Button
+            // Send Email Button
             if (!_invitationSent)
               SizedBox(
                 width: double.infinity,
@@ -522,9 +515,9 @@ Reply YES to accept and I'll order materials!''';
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.send),
+                      : const Icon(Icons.email),
                   label: Text(
-                    _isSending ? 'Sending...' : 'Send Invitation',
+                    _isSending ? 'Sending...' : 'Send Email Invitation',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -540,60 +533,150 @@ Reply YES to accept and I'll order materials!''';
                 ),
               ),
 
-            // SMS Contract Template Button
-            if (!_invitationSent) const SizedBox(height: 12),
+            // Or share the link directly section
+            const SizedBox(height: 16),
             if (!_invitationSent)
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: OutlinedButton.icon(
-                  onPressed: _isLoadingMilestones ? null : _sendContractText,
-                  icon: _isLoadingMilestones
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        )
-                      : const Icon(Icons.text_snippet_outlined),
-                  label: Text(
-                    _isLoadingMilestones ? 'Loading...' : 'Send Contract Text',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      'Or share the link directly',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                     ),
                   ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.primary,
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 2,
+                  const Expanded(child: Divider()),
+                ],
+              ),
+
+            if (!_invitationSent) const SizedBox(height: 12),
+            if (!_invitationSent)
+              Row(
+                children: [
+                  // Copy Link button
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: inviteLink));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Link copied to clipboard'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.copy, size: 18),
+                      label: const Text('Copy Link'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Send Text button
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoadingMilestones ? null : _sendContractText,
+                      icon: const Icon(Icons.textsms_outlined, size: 18),
+                      label: const Text('Send Text'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+            // Post-send state: show share options
+            if (_invitationSent) ...[
+              const SizedBox(height: 16),
+              Card(
+                color: Colors.green[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.green[700]),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Invitation email queued for ${widget.clientEmail}',
+                              style: TextStyle(
+                                color: Colors.green[800],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'You can also share the link directly:',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: inviteLink));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Link copied!')),
+                                );
+                              },
+                              icon: const Icon(Icons.copy, size: 16),
+                              label: const Text('Copy Link'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _sendContractText,
+                              icon: const Icon(Icons.textsms_outlined, size: 16),
+                              label: const Text('Send Text'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
+                  child: const Text('Done', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
+            ],
 
-            if (!_invitationSent) const SizedBox(height: 8),
+            if (!_invitationSent) const SizedBox(height: 12),
             if (!_invitationSent)
-              Text(
-                'Opens your SMS app with project details pre-filled',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey[600],
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Skip for now'),
                 ),
-                textAlign: TextAlign.center,
-              ),
-
-            const SizedBox(height: 8),
-            if (!_invitationSent)
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Skip for now'),
               ),
           ],
         ),

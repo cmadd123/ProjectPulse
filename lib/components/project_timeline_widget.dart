@@ -4,6 +4,9 @@ import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../backend/schema/milestone_record.dart';
 import '../backend/schema/milestone_update_record.dart';
+import '../services/notification_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/invoice_service.dart';
 import 'add_milestone_update_bottom_sheet.dart';
 import 'reply_to_update_bottom_sheet.dart';
 import 'request_changes_bottom_sheet.dart';
@@ -104,12 +107,19 @@ class ProjectTimelineWidget extends StatelessWidget {
     }
   }
 
-  Future<void> _markComplete(BuildContext context, String milestoneId) async {
+  Future<void> _markComplete(BuildContext context, String milestoneId, String milestoneName) async {
     try {
       await MilestoneRecord.updateMilestone(projectId, milestoneId, {
         'status': 'awaiting_approval',
         'marked_complete_at': FieldValue.serverTimestamp(),
       });
+
+      // Notify client about milestone completion
+      NotificationService.sendMilestoneNotification(
+        projectId: projectId,
+        projectName: projectData['project_name'] ?? 'Project',
+        milestoneName: milestoneName,
+      );
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -125,7 +135,7 @@ class ProjectTimelineWidget extends StatelessWidget {
     }
   }
 
-  Future<void> _approveMilestone(BuildContext context, String milestoneId) async {
+  Future<void> _approveMilestone(BuildContext context, String milestoneId, String milestoneName, double milestoneAmount) async {
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
@@ -172,27 +182,43 @@ class ProjectTimelineWidget extends StatelessWidget {
     }
 
     try {
-      print('DEBUG: Approving milestone $milestoneId in project $projectId');
-
       await MilestoneRecord.updateMilestone(projectId, milestoneId, {
         'status': 'approved',
         'approved_at': FieldValue.serverTimestamp(),
       });
 
-      print('DEBUG: Milestone approved successfully');
+      // Generate invoice for the approved milestone
+      try {
+        await InvoiceService.generateAndSave(
+          projectId: projectId,
+          milestoneId: milestoneId,
+          milestoneName: milestoneName,
+          milestoneAmount: milestoneAmount,
+          projectData: projectData,
+        );
+      } catch (_) {
+        // Invoice generation failure shouldn't block approval
+      }
+
+      final projectName = projectData['project_name'] as String? ?? 'Project';
+      NotificationService.sendMilestoneApprovedNotification(
+        projectId: projectId,
+        projectName: projectName,
+        milestoneName: milestoneName,
+      );
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
+        ConnectivityService.showOfflineWriteFeedback(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✓ Milestone approved! Payment will be released.'),
+            content: Text('Milestone approved! Invoice generated.'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
-      print('DEBUG: Error approving milestone: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -210,8 +236,6 @@ class ProjectTimelineWidget extends StatelessWidget {
     final completedCount = milestones.where((m) => m.status == 'approved').length;
     final totalCount = milestones.length;
     final progress = totalCount > 0 ? completedCount / totalCount : 0.0;
-
-    print('DEBUG: Progress bar - $completedCount of $totalCount approved (${(progress * 100).toStringAsFixed(0)}%)');
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -291,7 +315,7 @@ class ProjectTimelineWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildMilestoneCard(BuildContext context, MilestoneRecord milestone, bool isFirst, bool isLast) {
+  Widget _buildMilestoneCard(BuildContext context, MilestoneRecord milestone, bool isFirst, bool isLast, int phaseNumber, int totalPhases) {
     final statusColor = _getStatusColor(milestone.status);
     final isCompleted = milestone.status == 'approved';
     final isPending = milestone.status == 'pending';
@@ -310,6 +334,8 @@ class ProjectTimelineWidget extends StatelessWidget {
         userRole: userRole,
         isCompleted: isCompleted,
         onStartWorking: userRole == 'contractor' && isPending ? () => _startWorking(context, milestone.milestoneId) : null,
+        phaseNumber: phaseNumber,
+        totalPhases: totalPhases,
       );
     }
 
@@ -398,6 +424,11 @@ class ProjectTimelineWidget extends StatelessWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Phase $phaseNumber of $totalPhases',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
                     if (milestone.description.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -405,6 +436,28 @@ class ProjectTimelineWidget extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey[700],
+                        ),
+                      ),
+                    ],
+                    if (userRole == 'client' && milestone.status == 'awaiting_approval') ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue[50],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 14, color: Colors.blue[700]),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Approving this phase releases ${currencyFormat.format(milestone.amount)} to your contractor',
+                                style: TextStyle(fontSize: 12, color: Colors.blue[700]),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -574,7 +627,7 @@ class ProjectTimelineWidget extends StatelessWidget {
                             SizedBox(
                               width: double.infinity,
                               child: OutlinedButton.icon(
-                                onPressed: () => _markComplete(context, milestone.milestoneId),
+                                onPressed: () => _markComplete(context, milestone.milestoneId, milestone.name),
                                 icon: const Icon(Icons.check),
                                 label: const Text('Mark Complete'),
                                 style: OutlinedButton.styleFrom(
@@ -602,6 +655,7 @@ class ProjectTimelineWidget extends StatelessWidget {
                                 ),
                                 builder: (context) => RequestChangesBottomSheet(
                                   projectId: projectId,
+                                  projectName: projectData['project_name'] as String? ?? '',
                                   milestoneId: milestone.milestoneId,
                                   milestoneName: milestone.name,
                                 ),
@@ -616,7 +670,7 @@ class ProjectTimelineWidget extends StatelessWidget {
                           const SizedBox(width: 8),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: () => _approveMilestone(context, milestone.milestoneId),
+                              onPressed: () => _approveMilestone(context, milestone.milestoneId, milestone.name, milestone.amount),
                               icon: const Icon(Icons.check, size: 18),
                               label: const Text('Approve'),
                               style: ElevatedButton.styleFrom(
@@ -748,10 +802,6 @@ class ProjectTimelineWidget extends StatelessWidget {
         }
 
         final milestones = snapshot.data!;
-        print('DEBUG: StreamBuilder rebuilt with ${milestones.length} milestones');
-        for (var m in milestones) {
-          print('DEBUG:   - ${m.name}: ${m.status}');
-        }
 
         if (milestones.isEmpty) {
           return SingleChildScrollView(
@@ -804,7 +854,7 @@ class ProjectTimelineWidget extends StatelessWidget {
                 top: isFirst ? 24 : 0,
                 bottom: isLast ? 16 : 0,
               ),
-              child: _buildMilestoneCard(context, milestone, isFirst, isLast),
+              child: _buildMilestoneCard(context, milestone, isFirst, isLast, milestoneIndex + 1, milestones.length),
             );
           },
         );
@@ -968,6 +1018,8 @@ class _CollapsibleMilestoneCard extends StatefulWidget {
   final String userRole;
   final bool isCompleted;
   final VoidCallback? onStartWorking; // For pending milestones
+  final int phaseNumber;
+  final int totalPhases;
 
   const _CollapsibleMilestoneCard({
     required this.milestone,
@@ -978,6 +1030,8 @@ class _CollapsibleMilestoneCard extends StatefulWidget {
     required this.userRole,
     required this.isCompleted,
     this.onStartWorking,
+    required this.phaseNumber,
+    required this.totalPhases,
   });
 
   @override
@@ -1072,6 +1126,11 @@ class _CollapsibleMilestoneCardState extends State<_CollapsibleMilestoneCard> {
                             size: 20,
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Phase ${widget.phaseNumber} of ${widget.totalPhases}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                       ),
                       if (_isExpanded) ...[
                         if (widget.milestone.description.isNotEmpty) ...[

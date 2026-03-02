@@ -56,3 +56,7 @@ ios/Runner/GoogleService-Info.plist
 *.mobileprovision
 *.cer
 *.certSigningRequest
+
+# Cloud Functions local secrets
+functions/.env.local
+functions/.secret.local

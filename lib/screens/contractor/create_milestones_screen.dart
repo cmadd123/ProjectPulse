@@ -41,8 +41,10 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
             .asMap()
             .entries
             .map((entry) => _MilestoneItem(
-                  nameController: TextEditingController(text: entry.value.name),
-                  descriptionController: TextEditingController(text: entry.value.description),
+                  nameController: TextEditingController(),
+                  descriptionController: TextEditingController(),
+                  nameHint: entry.value.name,
+                  descriptionHint: entry.value.description,
                   percentage: entry.value.percentage,
                   order: entry.key + 1,
                 ))
@@ -106,7 +108,10 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
     }
 
     for (var milestone in milestones) {
-      if (milestone.nameController.text.trim().isEmpty) {
+      final name = milestone.nameController.text.trim().isNotEmpty
+          ? milestone.nameController.text.trim()
+          : milestone.nameHint;
+      if (name == null || name.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('All milestones must have a name')),
         );
@@ -127,10 +132,16 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
     try {
       // Save each milestone
       for (var item in milestones) {
+        final name = item.nameController.text.trim().isNotEmpty
+            ? item.nameController.text.trim()
+            : (item.nameHint ?? '');
+        final description = item.descriptionController.text.trim().isNotEmpty
+            ? item.descriptionController.text.trim()
+            : (item.descriptionHint ?? '');
         final milestone = MilestoneRecord(
           milestoneId: '',
-          name: item.nameController.text.trim(),
-          description: item.descriptionController.text.trim(),
+          name: name,
+          description: description,
           amount: _calculateAmount(item.percentage),
           percentage: item.percentage,
           order: item.order,
@@ -228,36 +239,92 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
             ),
           ),
 
-          // Template selector
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Choose a template:',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: MilestoneTemplates.templates.map((template) {
+          // Template selector — hides when keyboard is open
+          if (MediaQuery.of(context).viewInsets.bottom == 0) ...[
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'What type of project?',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  ...MilestoneTemplates.templates.map((template) {
                     final isSelected = selectedTemplate == template.name;
-                    return FilterChip(
-                      label: Text(template.name),
-                      selected: isSelected,
-                      onSelected: (_) => _loadTemplate(template.name),
-                      selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                      checkmarkColor: Theme.of(context).colorScheme.primary,
+                    const icons = <String, IconData>{
+                      'Kitchen Remodel': Icons.countertops,
+                      'Bathroom Remodel': Icons.bathtub,
+                      'Roofing': Icons.roofing,
+                      'Deck Build': Icons.deck,
+                      'Custom': Icons.tune,
+                    };
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: InkWell(
+                        onTap: () => _loadTemplate(template.name),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.primary.withOpacity(0.08)
+                                : Colors.grey[50],
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Colors.grey[300]!,
+                              width: isSelected ? 2 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                icons[template.name] ?? Icons.build,
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Colors.grey[600],
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      template.name,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 15,
+                                        color: isSelected
+                                            ? Theme.of(context).colorScheme.primary
+                                            : Colors.grey[900],
+                                      ),
+                                    ),
+                                    Text(
+                                      '${template.milestones.length} phases',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isSelected)
+                                Icon(Icons.check_circle,
+                                    color: Theme.of(context).colorScheme.primary, size: 22),
+                            ],
+                          ),
+                        ),
+                      ),
                     );
-                  }).toList(),
-                ),
-              ],
+                  }),
+                ],
+              ),
             ),
-          ),
 
-          const Divider(height: 1),
+            const Divider(height: 1),
+          ],
 
           // Milestone list
           Expanded(
@@ -356,12 +423,16 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
 class _MilestoneItem {
   final TextEditingController nameController;
   final TextEditingController descriptionController;
+  final String? nameHint;
+  final String? descriptionHint;
   double percentage;
   int order;
 
   _MilestoneItem({
     required this.nameController,
     required this.descriptionController,
+    this.nameHint,
+    this.descriptionHint,
     required this.percentage,
     required this.order,
   });
@@ -420,9 +491,11 @@ class _MilestoneCard extends StatelessWidget {
             const SizedBox(height: 12),
             TextField(
               controller: item.nameController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Name *',
-                border: OutlineInputBorder(),
+                hintText: item.nameHint,
+                hintStyle: TextStyle(color: Colors.grey[400]),
+                border: const OutlineInputBorder(),
                 filled: true,
                 fillColor: Colors.white,
               ),
@@ -430,9 +503,11 @@ class _MilestoneCard extends StatelessWidget {
             const SizedBox(height: 12),
             TextField(
               controller: item.descriptionController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Description',
-                border: OutlineInputBorder(),
+                hintText: item.descriptionHint,
+                hintStyle: TextStyle(color: Colors.grey[400]),
+                border: const OutlineInputBorder(),
                 filled: true,
                 fillColor: Colors.white,
               ),

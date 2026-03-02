@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -86,12 +87,12 @@ class ContractorPublicProfile extends StatelessWidget {
                           if (logoUrl != null)
                             ClipRRect(
                               borderRadius: BorderRadius.circular(50),
-                              child: Image.network(
-                                logoUrl,
+                              child: CachedNetworkImage(
+                                imageUrl: logoUrl,
                                 width: 100,
                                 height: 100,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
+                                errorWidget: (context, url, error) {
                                   return _buildDefaultLogo();
                                 },
                               ),
@@ -425,10 +426,10 @@ class _PortfolioProjectCard extends StatelessWidget {
                     width: double.infinity,
                     color: Colors.grey[200],
                     child: firstPhotoUrl != null
-                        ? Image.network(
-                            firstPhotoUrl,
+                        ? CachedNetworkImage(
+                            imageUrl: firstPhotoUrl,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
+                            errorWidget: (context, url, error) {
                               return Icon(
                                 Icons.image_not_supported,
                                 size: 50,
@@ -570,10 +571,10 @@ class _ProjectDetailsDialog extends StatelessWidget {
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: photoUrl != null
-                            ? Image.network(
-                                photoUrl,
+                            ? CachedNetworkImage(
+                                imageUrl: photoUrl,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
+                                errorWidget: (context, url, error) {
                                   return Container(
                                     color: Colors.grey[200],
                                     child: Icon(

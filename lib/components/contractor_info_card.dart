@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Displays contractor branding and info on client-facing screens
-class ContractorInfoCard extends StatelessWidget {
+class ContractorInfoCard extends StatefulWidget {
   final Map<String, dynamic> projectData;
   final bool compact;
 
@@ -12,61 +13,97 @@ class ContractorInfoCard extends StatelessWidget {
     this.compact = false,
   });
 
-  Future<Map<String, dynamic>?> _getContractorData() async {
+  @override
+  State<ContractorInfoCard> createState() => _ContractorInfoCardState();
+}
+
+class _ContractorInfoCardState extends State<ContractorInfoCard> {
+  Map<String, dynamic>? _contractorData;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchContractorData();
+  }
+
+  @override
+  void didUpdateWidget(ContractorInfoCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re-fetch if project changed (different contractor_ref)
+    final oldRef = oldWidget.projectData['contractor_ref'];
+    final newRef = widget.projectData['contractor_ref'];
+    if (oldRef != newRef) {
+      _fetchContractorData();
+    }
+  }
+
+  Future<void> _fetchContractorData() async {
     try {
-      final contractorRef = projectData['contractor_ref'] as DocumentReference?;
-      if (contractorRef == null) return null;
+      final contractorRef = widget.projectData['contractor_ref'] as DocumentReference?;
+      if (contractorRef == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
       final contractorUserDoc = await contractorRef.get();
-      if (!contractorUserDoc.exists) return null;
+      if (!contractorUserDoc.exists) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
       final userData = contractorUserDoc.data() as Map<String, dynamic>?;
-      return userData?['contractor_profile'] as Map<String, dynamic>?;
-    } catch (e) {
-      debugPrint('Error fetching contractor data: $e');
-      return null;
+      final profile = userData?['contractor_profile'] as Map<String, dynamic>?;
+
+      if (mounted) {
+        setState(() {
+          _contractorData = profile;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: _getContractorData(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data == null) {
-          return const SizedBox.shrink();
-        }
+    if (_isLoading) {
+      return const SizedBox.shrink();
+    }
 
-        final contractorData = snapshot.data!;
-        final businessName = contractorData['business_name'] as String? ?? 'Contractor';
-        final ownerName = contractorData['owner_name'] as String?;
-        final phone = contractorData['phone'] as String?;
-        final logoUrl = contractorData['logo_url'] as String?;
-        final specialties = contractorData['specialties'] as List<dynamic>?;
-        final rating = contractorData['rating_average'] as num?;
-        final totalReviews = contractorData['total_reviews'] as int?;
+    if (_contractorData == null) {
+      return const SizedBox.shrink();
+    }
 
-        if (compact) {
-          return _buildCompactCard(
-            context,
-            businessName,
-            logoUrl,
-            rating,
-            totalReviews,
-          );
-        }
+    final contractorData = _contractorData!;
+    final businessName = contractorData['business_name'] as String? ?? 'Contractor';
+    final ownerName = contractorData['owner_name'] as String?;
+    final phone = contractorData['phone'] as String?;
+    final logoUrl = contractorData['logo_url'] as String?;
+    final specialties = contractorData['specialties'] as List<dynamic>?;
+    final rating = contractorData['rating_average'] as num?;
+    final totalReviews = contractorData['total_reviews'] as int?;
 
-        return _buildFullCard(
-          context,
-          businessName,
-          ownerName,
-          phone,
-          logoUrl,
-          specialties,
-          rating,
-          totalReviews,
-        );
-      },
+    if (widget.compact) {
+      return _buildCompactCard(
+        context,
+        businessName,
+        logoUrl,
+        rating,
+        totalReviews,
+      );
+    }
+
+    return _buildFullCard(
+      context,
+      businessName,
+      ownerName,
+      phone,
+      logoUrl,
+      specialties,
+      rating,
+      totalReviews,
     );
   }
 
@@ -78,12 +115,19 @@ class ContractorInfoCard extends StatelessWidget {
     int? totalReviews,
   ) {
     return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Colors.grey[200]!, width: 1),
-        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -350,10 +394,10 @@ class ContractorInfoCard extends StatelessWidget {
       child: logoUrl != null
           ? ClipRRect(
               borderRadius: BorderRadius.circular(size / 4),
-              child: Image.network(
-                logoUrl,
+              child: CachedNetworkImage(
+                imageUrl: logoUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
+                errorWidget: (context, url, error) {
                   return _buildDefaultLogo(size);
                 },
               ),

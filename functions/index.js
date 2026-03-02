@@ -1,36 +1,39 @@
-const functions = require('firebase-functions');
-const admin = require('firebase-admin');
-const twilio = require('twilio');
+// 2nd Gen (v2) Cloud Functions — runs on Node 22
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { defineString, defineSecret } = require('firebase-functions/params');
+const { initializeApp } = require('firebase-admin/app');
+const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
+const { getMessaging } = require('firebase-admin/messaging');
 const sgMail = require('@sendgrid/mail');
 
-admin.initializeApp();
+initializeApp();
 
-// Initialize Twilio and SendGrid from Firebase config
-// Set these in Firebase Console → Functions → Configuration
-// firebase functions:config:set twilio.account_sid="YOUR_SID" twilio.auth_token="YOUR_TOKEN" twilio.phone_number="+1234567890"
-// firebase functions:config:set sendgrid.api_key="YOUR_API_KEY" sendgrid.from_email="noreply@projectpulsehub.com"
-const twilioClient = functions.config().twilio ? twilio(
-  functions.config().twilio.account_sid,
-  functions.config().twilio.auth_token
-) : null;
+// ── Configuration via params ─────────────────────────────────────
+// Non-secret values come from functions/.env
+const sendgridFromEmail = defineString('SENDGRID_FROM_EMAIL');
 
-if (functions.config().sendgrid) {
-  sgMail.setApiKey(functions.config().sendgrid.api_key);
-}
+// Secret values come from Cloud Secret Manager
+const sendgridApiKey = defineSecret('SENDGRID_API_KEY');
 
-/**
- * Cloud Function to send push notifications
- * Triggered when a new document is created in the 'notifications' collection
- */
-exports.sendPushNotification = functions.firestore
-  .document('notifications/{notificationId}')
-  .onCreate(async (snap, context) => {
+// Twilio is not yet configured — to enable SMS, run:
+//   firebase functions:secrets:set TWILIO_ACCOUNT_SID
+//   firebase functions:secrets:set TWILIO_AUTH_TOKEN
+//   firebase functions:secrets:set TWILIO_PHONE_NUMBER
+
+// ── 1. Push Notifications ───────────────────────────────────────
+// Triggered when a new document is created in the 'notifications' collection
+exports.sendPushNotification = onDocumentCreated(
+  'notifications/{notificationId}',
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
     const notificationData = snap.data();
 
     // Skip if already processed
     if (notificationData.processed) {
       console.log('Notification already processed, skipping');
-      return null;
+      return;
     }
 
     try {
@@ -39,7 +42,7 @@ exports.sendPushNotification = functions.firestore
       if (!fcm_tokens || fcm_tokens.length === 0) {
         console.log('No FCM tokens found');
         await snap.ref.update({ processed: true, error: 'No FCM tokens' });
-        return null;
+        return;
       }
 
       // Prepare notification message
@@ -53,7 +56,7 @@ exports.sendPushNotification = functions.firestore
       };
 
       // Send to multiple devices
-      const response = await admin.messaging().sendMulticast(message);
+      const response = await getMessaging().sendEachForMulticast(message);
 
       console.log(`Successfully sent ${response.successCount} notifications`);
       console.log(`Failed to send ${response.failureCount} notifications`);
@@ -61,7 +64,7 @@ exports.sendPushNotification = functions.firestore
       // Update notification document as processed
       await snap.ref.update({
         processed: true,
-        processed_at: admin.firestore.FieldValue.serverTimestamp(),
+        processed_at: FieldValue.serverTimestamp(),
         success_count: response.successCount,
         failure_count: response.failureCount,
       });
@@ -79,72 +82,137 @@ exports.sendPushNotification = functions.firestore
         // If tokens are invalid, remove them from user document
         if (failedTokens.length > 0 && notificationData.recipient_ref) {
           await notificationData.recipient_ref.update({
-            fcm_tokens: admin.firestore.FieldValue.arrayRemove(...failedTokens),
+            fcm_tokens: FieldValue.arrayRemove(...failedTokens),
           });
           console.log(`Removed ${failedTokens.length} invalid tokens`);
         }
       }
-
-      return response;
     } catch (error) {
       console.error('Error sending notification:', error);
       await snap.ref.update({
         processed: true,
         error: error.message,
       });
-      return null;
     }
+  }
+);
+
+// ── 2. Cleanup Old Notifications ────────────────────────────────
+// Runs daily to delete notifications older than 30 days
+exports.cleanupOldNotifications = onSchedule('every 24 hours', async () => {
+  const db = getFirestore();
+  const thirtyDaysAgo = Timestamp.fromDate(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  );
+
+  const oldNotifications = await db
+    .collection('notifications')
+    .where('created_at', '<', thirtyDaysAgo)
+    .limit(500)
+    .get();
+
+  const batch = db.batch();
+  let count = 0;
+
+  oldNotifications.docs.forEach((doc) => {
+    batch.delete(doc.ref);
+    count++;
   });
 
-/**
- * Clean up old notification documents (optional)
- * Runs daily to delete notifications older than 30 days
- */
-exports.cleanupOldNotifications = functions.pubsub
-  .schedule('every 24 hours')
-  .onRun(async (context) => {
-    const thirtyDaysAgo = admin.firestore.Timestamp.fromDate(
-      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-    );
+  if (count > 0) {
+    await batch.commit();
+    console.log(`Deleted ${count} old notification documents`);
+  }
+});
 
-    const oldNotifications = await admin
-      .firestore()
-      .collection('notifications')
-      .where('created_at', '<', thirtyDaysAgo)
-      .limit(500)
-      .get();
+// ── 3. COI Expiry Check ─────────────────────────────────────────
+// Sends push notification to team owner for COIs expiring within 30 days
+exports.checkCoiExpiry = onSchedule('every 24 hours', async () => {
+  const db = getFirestore();
+  const now = new Date();
+  const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    const batch = admin.firestore().batch();
-    let count = 0;
+  const teamsSnapshot = await db.collection('teams').get();
 
-    oldNotifications.docs.forEach((doc) => {
-      batch.delete(doc.ref);
-      count++;
-    });
+  for (const teamDoc of teamsSnapshot.docs) {
+    const teamData = teamDoc.data();
+    const ownerUid = teamData.owner_uid;
 
-    if (count > 0) {
-      await batch.commit();
-      console.log(`Deleted ${count} old notification documents`);
+    const subsSnapshot = await teamDoc.ref.collection('subcontractors')
+      .where('status', '==', 'active').get();
+
+    const expiringCois = [];
+    const expiredCois = [];
+
+    for (const subDoc of subsSnapshot.docs) {
+      const subData = subDoc.data();
+      const coisSnapshot = await subDoc.ref.collection('coi').get();
+
+      for (const coiDoc of coisSnapshot.docs) {
+        const coiData = coiDoc.data();
+        if (!coiData.expiry_date) continue;
+        const expiryDate = coiData.expiry_date.toDate();
+
+        if (expiryDate < now) {
+          expiredCois.push({ sub: subData.company_name, type: coiData.coverage_type });
+        } else if (expiryDate <= thirtyDaysFromNow) {
+          expiringCois.push({ sub: subData.company_name, type: coiData.coverage_type });
+        }
+      }
     }
 
-    return null;
-  });
+    if (expiringCois.length > 0 || expiredCois.length > 0) {
+      const ownerDoc = await db.collection('users').doc(ownerUid).get();
+      const ownerData = ownerDoc.data();
+      const fcmTokens = ownerData?.fcm_tokens || [];
 
-/**
- * Send Email invitation when contractor explicitly requests it
- * Triggered when invitation_ready flag is set to true
- */
-exports.sendProjectInvitation = functions.firestore
-  .document('projects/{projectId}')
-  .onUpdate(async (change, context) => {
-    const beforeData = change.before.data();
-    const afterData = change.after.data();
-    const projectId = context.params.projectId;
+      if (fcmTokens.length > 0) {
+        let body = '';
+        if (expiredCois.length > 0) {
+          body += `${expiredCois.length} expired COI(s). `;
+        }
+        if (expiringCois.length > 0) {
+          body += `${expiringCois.length} expiring within 30 days.`;
+        }
+
+        await db.collection('notifications').add({
+          type: 'coi_expiry',
+          recipient_ref: db.doc(`users/${ownerUid}`),
+          fcm_tokens: fcmTokens,
+          title: 'COI Alert',
+          body: body.trim(),
+          data: { type: 'coi_expiry' },
+          created_at: FieldValue.serverTimestamp(),
+          processed: false,
+        });
+      }
+    }
+  }
+
+  console.log('COI expiry check complete');
+});
+
+// ── 4. Project Invitation Email/SMS ─────────────────────────────
+// Triggered when invitation_ready flag is set to true on a project
+exports.sendProjectInvitation = onDocumentUpdated(
+  {
+    document: 'projects/{projectId}',
+    secrets: [sendgridApiKey],
+  },
+  async (event) => {
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+    const projectId = event.params.projectId;
 
     // Only send invitation if invitation_ready was just set to true
     if (beforeData.invitation_ready === true || afterData.invitation_ready !== true) {
-      console.log('Skipping - invitation not ready or already sent');
-      return null;
+      return;
+    }
+
+    // Initialize SendGrid with the secret value
+    const apiKey = sendgridApiKey.value();
+    if (apiKey) {
+      sgMail.setApiKey(apiKey);
     }
 
     const projectData = afterData;
@@ -154,8 +222,7 @@ exports.sendProjectInvitation = functions.firestore
       const clientName = projectData.client_name || 'there';
       const clientEmail = projectData.client_email;
       const clientPhone = projectData.client_phone;
-      // TODO: Update this to your custom domain once DNS is configured
-      const inviteLink = `https://projectpulse-7d258.web.app/join/${projectId}`;
+      const inviteLink = `https://projectpulsehub.com/join/${projectId}`;
 
       // Get contractor info for personalized message
       const contractorRef = projectData.contractor_ref;
@@ -171,27 +238,13 @@ exports.sendProjectInvitation = functions.firestore
 
       const results = { sms: null, email: null };
 
-      // Send SMS if phone number provided
-      if (clientPhone && twilioClient && functions.config().twilio) {
-        try {
-          const smsMessage = `Hi ${clientName}! ${contractorName} created a project for you: "${projectName}"\n\nView real-time updates here: ${inviteLink}\n\n- ProjectPulse`;
-
-          const smsResult = await twilioClient.messages.create({
-            body: smsMessage,
-            from: functions.config().twilio.phone_number,
-            to: clientPhone,
-          });
-
-          results.sms = { success: true, sid: smsResult.sid };
-          console.log(`SMS invitation sent to ${clientPhone}: ${smsResult.sid}`);
-        } catch (error) {
-          results.sms = { success: false, error: error.message };
-          console.error(`Error sending SMS to ${clientPhone}:`, error);
-        }
+      // SMS: Twilio not configured yet — skip
+      if (clientPhone) {
+        results.sms = { success: false, error: 'Twilio not configured' };
       }
 
-      // Send Email if email address provided
-      if (clientEmail && functions.config().sendgrid) {
+      // Send Email if email address provided and SendGrid is configured
+      if (clientEmail && apiKey) {
         try {
           const emailHtml = `
             <!DOCTYPE html>
@@ -300,9 +353,6 @@ exports.sendProjectInvitation = functions.firestore
                   margin: 20px 0;
                   box-shadow: 0 4px 6px rgba(45, 55, 72, 0.3);
                 }
-                .button:hover {
-                  box-shadow: 0 6px 8px rgba(45, 55, 72, 0.4);
-                }
                 .link-box {
                   background: #f8f9fa;
                   padding: 12px;
@@ -332,7 +382,7 @@ exports.sendProjectInvitation = functions.firestore
               <div class="container">
                 <div class="header">
                   <div class="header-content">
-                    <h1>🏗️ ProjectPulse</h1>
+                    <h1>ProjectPulse</h1>
                     <p>You've been invited to view your project</p>
                   </div>
                 </div>
@@ -340,8 +390,7 @@ exports.sendProjectInvitation = functions.firestore
                 <div class="contractor-section">
                   <div class="contractor-content">
                     <div class="contractor-logo">
-                      <span class="contractor-logo-placeholder">🏗️</span>
-                      <!-- Logo image will go here: <img src="contractor_logo_url" alt="Logo" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px;"> -->
+                      <span class="contractor-logo-placeholder">&#128679;</span>
                     </div>
                     <div class="contractor-info">
                       <p class="contractor-label">Your Contractor</p>
@@ -360,7 +409,7 @@ exports.sendProjectInvitation = functions.firestore
                   <p>View daily photo updates, track milestones, and stay connected throughout your project.</p>
 
                   <p style="text-align: center;">
-                    <a href="${inviteLink}" class="button">View Your Project →</a>
+                    <a href="${inviteLink}" class="button">View Your Project &rarr;</a>
                   </p>
 
                   <div class="link-box">
@@ -370,7 +419,7 @@ exports.sendProjectInvitation = functions.firestore
                 </div>
 
                 <div class="footer">
-                  <p><strong>ProjectPulse</strong> · Real-time project communication</p>
+                  <p><strong>ProjectPulse</strong> &middot; Real-time project communication</p>
                   <p style="font-size: 12px; margin-top: 8px;">Keeping contractors and clients connected</p>
                 </div>
               </div>
@@ -381,7 +430,7 @@ exports.sendProjectInvitation = functions.firestore
           const emailMsg = {
             to: clientEmail,
             from: {
-              email: functions.config().sendgrid.from_email,
+              email: sendgridFromEmail.value(),
               name: 'ProjectPulse',
             },
             subject: `${contractorName} invited you to: ${projectName}`,
@@ -399,17 +448,15 @@ exports.sendProjectInvitation = functions.firestore
       }
 
       // Log invitation results to project document
-      await snap.ref.update({
+      await event.data.after.ref.update({
         invitation_sent: {
           sms: results.sms,
           email: results.email,
-          sent_at: admin.firestore.FieldValue.serverTimestamp(),
+          sent_at: FieldValue.serverTimestamp(),
         },
       });
-
-      return results;
     } catch (error) {
       console.error('Error sending project invitation:', error);
-      return { error: error.message };
     }
-  });
+  }
+);

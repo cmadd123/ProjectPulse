@@ -19,6 +19,10 @@ service cloud.firestore {
       return isAuthenticated() && getUserRole() == 'client';
     }
 
+    function isTeamMemberRole() {
+      return isAuthenticated() && getUserRole() == 'team_member';
+    }
+
     function isProjectOwner(projectId) {
       return isAuthenticated() &&
         get(/databases/$(database)/documents/projects/$(projectId)).data.contractor_ref ==
@@ -26,21 +30,123 @@ service cloud.firestore {
     }
 
     function isProjectCollaborator(projectId) {
-      // Note: This function checks if user is a collaborator
-      // In the app, we store collaborators as: [{user_ref: DocumentReference, name: "...", role: "..."}]
-      // Firestore rules don't support .map(), so we check directly in write rules instead
       return false; // Placeholder - actual check happens in write rules with exists() check
     }
 
     function isProjectClient(projectId) {
       let project = get(/databases/$(database)/documents/projects/$(projectId)).data;
+      return isAuthenticated() && (
+        project.client_user_ref == /databases/$(database)/documents/users/$(request.auth.uid) ||
+        project.client_email == request.auth.token.email
+      );
+    }
+
+    function isTeamMemberForProject(projectId) {
+      let project = get(/databases/$(database)/documents/projects/$(projectId)).data;
+      return isTeamMemberRole() && request.auth.uid in project.assigned_member_uids;
+    }
+
+    function isForemanForProject(projectId) {
+      let userData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let project = get(/databases/$(database)/documents/projects/$(projectId)).data;
       return isAuthenticated() &&
-        project.client_user_ref == /databases/$(database)/documents/users/$(request.auth.uid);
+        userData.role == 'team_member' &&
+        userData.team_member_profile.team_role == 'foreman' &&
+        userData.team_id == project.team_id;
     }
 
     function canAccessProject(projectId) {
-      return isProjectOwner(projectId) || isProjectClient(projectId);
-      // Note: Collaborator access is checked inline in rules below
+      return isProjectOwner(projectId) || isProjectClient(projectId) || isTeamMemberForProject(projectId) || isForemanForProject(projectId);
+    }
+
+    function isTeamOwner(teamId) {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/teams/$(teamId)).data.owner_uid == request.auth.uid;
+    }
+
+    function isTeamMember(teamId) {
+      return isAuthenticated() &&
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.member_uids;
+    }
+
+    // Teams collection
+    match /teams/{teamId} {
+      // Team owner can read and update their team
+      allow read, update: if isTeamOwner(teamId);
+
+      // Team members can read their team doc (to get team name)
+      allow read: if isTeamMember(teamId);
+
+      // Authenticated users can create teams (happens during contractor signup before user doc exists)
+      allow create: if isAuthenticated() &&
+        request.resource.data.owner_uid == request.auth.uid;
+
+      // Allow invited members to add themselves to member_uids during signup
+      allow update: if isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['member_uids']);
+
+      // Only owner can delete team
+      allow delete: if isTeamOwner(teamId);
+
+      // Team members subcollection
+      match /members/{memberId} {
+        // Team owner can manage members
+        allow read, write: if isTeamOwner(teamId);
+
+        // Team members can read all members in their team
+        allow read: if isTeamMember(teamId);
+
+        // Allow users to read their own invite by email (for email-based auto-linking on signup)
+        allow read: if isAuthenticated() &&
+          resource.data.email == request.auth.token.email;
+
+        // Allow anyone authenticated to update their own member doc (for invite acceptance)
+        allow update: if isAuthenticated() &&
+          request.resource.data.user_uid == request.auth.uid;
+      }
+
+      // Subcontractors subcollection
+      match /subcontractors/{subId} {
+        // Team owner can CRUD subcontractors
+        allow read, write: if isTeamOwner(teamId);
+
+        // Team members can read subcontractors
+        allow read: if isTeamMember(teamId);
+
+        // COI subcollection
+        match /coi/{coiId} {
+          // Team owner can CRUD COIs
+          allow read, write: if isTeamOwner(teamId);
+
+          // Team members can read COIs
+          allow read: if isTeamMember(teamId);
+        }
+      }
+
+      // Schedule entries subcollection (weekly crew scheduling)
+      match /schedule_entries/{entryId} {
+        // Team owner can CRUD schedule entries
+        allow read, write: if isTeamOwner(teamId);
+
+        // Foremen can read and write schedule entries
+        allow read, write: if isTeamMember(teamId) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team_member_profile.team_role == 'foreman';
+
+        // Team members can read schedule entries (see their own schedule)
+        allow read: if isTeamMember(teamId);
+      }
+    }
+
+    // Pending team invites (email-based lookup for auto-linking on signup)
+    match /pending_team_invites/{email} {
+      // Contractors can create invites when adding team members
+      allow create, write: if isContractor();
+
+      // Workers can read their own invite (email matches their auth email)
+      allow read: if isAuthenticated() && email == request.auth.token.email;
+
+      // Workers can delete their invite after linking (cleanup)
+      allow delete: if isAuthenticated() && email == request.auth.token.email;
     }
 
     // Users collection
@@ -50,6 +156,19 @@ service cloud.firestore {
 
       // Anyone authenticated can create their initial profile
       allow create: if isAuthenticated() && request.auth.uid == userId;
+
+      // Team owner (GC) can update team member's role
+      allow update: if isAuthenticated() &&
+        resource.data.role == 'team_member' &&
+        resource.data.team_id != null &&
+        isTeamOwner(resource.data.team_id) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['team_member_profile']);
+
+      // Team owner can read team members' profiles (to verify linking)
+      allow read: if isAuthenticated() &&
+        resource.data.role == 'team_member' &&
+        resource.data.team_id != null &&
+        isTeamOwner(resource.data.team_id);
     }
 
     // Projects collection
@@ -58,10 +177,10 @@ service cloud.firestore {
       allow create: if isContractor() &&
         request.resource.data.contractor_ref == /databases/$(database)/documents/users/$(request.auth.uid);
 
-      // Project owner, collaborators, and client can read individual documents
+      // Project owner, team members, and client can read individual documents
       allow get: if canAccessProject(projectId);
 
-      // Allow contractors to list their own projects (query by contractor_uid)
+      // Allow contractors and team members to list projects
       // Allow clients to list projects where they are the client
       allow list: if isAuthenticated();
 
@@ -70,7 +189,16 @@ service cloud.firestore {
         // Allow client to link themselves to project if email matches
         (isAuthenticated() &&
          request.resource.data.client_email == request.auth.token.email &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['client_user_ref']));
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['client_user_ref'])) ||
+        // Allow client to update project cost (after approving change order)
+        (isProjectClient(projectId) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['current_cost'])) ||
+        // Allow team members and foremen to update project timestamp
+        ((isTeamMemberForProject(projectId) || isForemanForProject(projectId)) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updated_at'])) ||
+        // Allow adding to assigned_member_uids (during team member auto-link on signup)
+        (isAuthenticated() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assigned_member_uids']));
 
       // Only project owner can delete
       allow delete: if isProjectOwner(projectId);
@@ -80,20 +208,37 @@ service cloud.firestore {
         // Owner can create/read/update/delete milestones
         allow write: if isProjectOwner(projectId);
 
-        // Anyone authenticated can read milestones (project-level access control happens at parent)
-        // This is safe because users can only navigate to milestones if they have project access
+        // Client can update milestones (approve, request changes)
+        allow update: if isProjectClient(projectId);
+
+        // Foreman can update milestone status (start/complete)
+        allow update: if isForemanForProject(projectId);
+
+        // Anyone authenticated can read milestones
         allow read: if isAuthenticated();
+
+        // Change requests subcollection (client feedback on milestones)
+        match /change_requests/{requestId} {
+          // Client can create change requests
+          allow create: if isProjectClient(projectId);
+
+          // Owner and client can read
+          allow read: if isProjectOwner(projectId) || isProjectClient(projectId);
+
+          // Owner can update (mark as addressed)
+          allow update: if isProjectOwner(projectId);
+        }
       }
 
       // Updates (photo posts) subcollection
       match /updates/{updateId} {
-        // Owner can create updates, or anyone authenticated (collaborator check happens in app logic)
+        // Owner and team members can create updates
         allow create: if isAuthenticated() && (
           // Ensure posted_by_ref matches current user
           request.resource.data.posted_by_ref == /databases/$(database)/documents/users/$(request.auth.uid)
         );
 
-        // Anyone authenticated can read updates (project-level access control happens at parent)
+        // Anyone authenticated can read updates
         allow read: if isAuthenticated();
 
         // Only the person who posted can update/delete their own update
@@ -131,6 +276,53 @@ service cloud.firestore {
         // Can't update or delete messages (audit trail)
         allow update, delete: if false;
       }
+
+      // Expenses subcollection (materials & job costing)
+      match /expenses/{expenseId} {
+        // Owner, client, and team members can read expenses
+        allow read: if canAccessProject(projectId);
+
+        // Owner and foremen can create expenses
+        allow create: if isProjectOwner(projectId) || isForemanForProject(projectId);
+
+        // Only owner can update or delete expenses (correct mistakes)
+        allow update, delete: if isProjectOwner(projectId);
+      }
+
+      // Documents subcollection (document vault + lien waivers)
+      match /documents/{docId} {
+        // Owner can CRUD documents
+        allow read, write: if isProjectOwner(projectId);
+
+        // Client and team members can read documents
+        allow read: if canAccessProject(projectId);
+
+        // Foreman can create documents (upload from job site)
+        allow create: if isForemanForProject(projectId);
+      }
+
+      // Time entries subcollection (hours logging per project)
+      match /time_entries/{entryId} {
+        // All project participants can read time entries
+        allow read: if canAccessProject(projectId);
+
+        // Owner can create time entries for anyone
+        allow create: if isProjectOwner(projectId);
+
+        // Foreman can create time entries for anyone on project
+        allow create: if isForemanForProject(projectId);
+
+        // Team members can create their own time entries only
+        allow create: if isTeamMemberForProject(projectId) &&
+          request.resource.data.logged_by_uid == request.auth.uid;
+
+        // Owner can update or delete any time entry
+        allow update, delete: if isProjectOwner(projectId);
+
+        // Creator can update their own entry
+        allow update: if isAuthenticated() &&
+          resource.data.logged_by_uid == request.auth.uid;
+      }
     }
 
     // Notifications collection (for push notification queue)
@@ -142,8 +334,10 @@ service cloud.firestore {
       allow read: if isAuthenticated() &&
         resource.data.recipient_ref == /databases/$(database)/documents/users/$(request.auth.uid);
 
-      // Cloud Functions update after processing
-      allow update: if false; // Only Cloud Functions can update via admin SDK
+      // Recipients can mark their own notifications as read
+      allow update: if isAuthenticated() &&
+        resource.data.recipient_ref == /databases/$(database)/documents/users/$(request.auth.uid) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
 
       // Auto-delete old notifications
       allow delete: if false; // Only Cloud Functions

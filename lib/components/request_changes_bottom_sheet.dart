@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/notification_service.dart';
 
 class RequestChangesBottomSheet extends StatefulWidget {
   final String projectId;
+  final String projectName;
   final String milestoneId;
   final String milestoneName;
 
   const RequestChangesBottomSheet({
     super.key,
     required this.projectId,
+    this.projectName = '',
     required this.milestoneId,
     required this.milestoneName,
   });
@@ -74,6 +77,12 @@ class _RequestChangesBottomSheetState extends State<RequestChangesBottomSheet> {
         'changes_requested': true,
         'last_change_request_at': FieldValue.serverTimestamp(),
       });
+
+      NotificationService.sendChangesRequestedNotification(
+        projectId: widget.projectId,
+        projectName: widget.projectName,
+        milestoneName: widget.milestoneName,
+      );
 
       if (mounted) {
         Navigator.pop(context);

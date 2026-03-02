@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ProjectGalleryScreen extends StatelessWidget {
   final String projectId;
@@ -93,19 +94,17 @@ class ProjectGalleryScreen extends StatelessWidget {
                     fit: StackFit.expand,
                     children: [
                       photoUrl != null
-                          ? Image.network(
-                              photoUrl,
+                          ? CachedNetworkImage(
+                              imageUrl: photoUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: Colors.grey[200],
-                                  child: Icon(
-                                    Icons.broken_image,
-                                    size: 50,
-                                    color: Colors.grey[400],
-                                  ),
-                                );
-                              },
+                              placeholder: (context, url) => Container(
+                                color: Colors.grey[200],
+                                child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                              ),
+                              errorWidget: (context, url, error) => Container(
+                                color: Colors.grey[200],
+                                child: Icon(Icons.broken_image, size: 50, color: Colors.grey[400]),
+                              ),
                             )
                           : Container(
                               color: Colors.grey[200],
@@ -237,16 +236,15 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
                       ? InteractiveViewer(
                           minScale: 0.5,
                           maxScale: 4.0,
-                          child: Image.network(
-                            photoUrl,
+                          child: CachedNetworkImage(
+                            imageUrl: photoUrl,
                             fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
-                                Icons.broken_image,
-                                size: 100,
-                                color: Colors.white54,
-                              );
-                            },
+                            placeholder: (context, url) => const Center(
+                              child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
+                            ),
+                            errorWidget: (context, url, error) => const Icon(
+                              Icons.broken_image, size: 100, color: Colors.white54,
+                            ),
                           ),
                         )
                       : const Icon(

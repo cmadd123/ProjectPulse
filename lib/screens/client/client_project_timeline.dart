@@ -2,20 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../../services/connectivity_service.dart';
 import 'leave_review_screen.dart';
 import 'enhanced_photo_timeline.dart';
 import '../shared/project_chat_screen.dart';
 import '../../components/project_timeline_widget.dart';
 import '../../components/contractor_info_card.dart';
+import '../../components/expenses_tab_widget.dart';
+import '../../components/documents_tab_widget.dart';
+import '../../components/time_tab_widget.dart';
+import '../../components/client_welcome_sheet.dart';
+import '../../components/notification_permission_sheet.dart';
+import '../../components/skeleton_loader.dart';
 
 class ClientProjectTimeline extends StatefulWidget {
   final String projectId;
   final Map<String, dynamic> projectData;
+  final bool isPreview;
 
   const ClientProjectTimeline({
     super.key,
     required this.projectId,
     required this.projectData,
+    this.isPreview = false,
   });
 
   @override
@@ -29,7 +39,53 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
   @override
   void initState() {
     super.initState();
+    if (widget.isPreview) return;
+    _ensureClientLinked();
     _listenToNotifications();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await ClientWelcomeSheet.showIfFirstVisit(context, widget.projectData);
+      if (!mounted) return;
+      final contractorName =
+          widget.projectData['contractor_business_name'] as String? ??
+              'your contractor';
+      NotificationPermissionSheet.showIfNeeded(context, contractorName);
+    });
+  }
+
+  /// Auto-link client_user_ref if not already set.
+  /// This is needed for clients who signed up normally (not via deep link).
+  /// Without it, all client write operations (approve, decline, request changes) fail.
+  Future<void> _ensureClientLinked() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final projectDoc = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId)
+          .get();
+
+      if (!projectDoc.exists) return;
+
+      final data = projectDoc.data()!;
+      final clientUserRef = data['client_user_ref'];
+      final clientEmail = data['client_email'] as String?;
+
+      // If client_user_ref is already set, nothing to do
+      if (clientUserRef != null) return;
+
+      // Only link if this user's email matches the project's client_email
+      if (clientEmail != null && clientEmail == user.email) {
+        final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+        await FirebaseFirestore.instance
+            .collection('projects')
+            .doc(widget.projectId)
+            .update({'client_user_ref': userRef});
+      }
+    } catch (_) {
+      // Auto-link failed silently — will retry on next load
+    }
   }
 
   void _listenToNotifications() {
@@ -119,6 +175,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
       }
 
       if (context.mounted) {
+        ConnectivityService.showOfflineWriteFeedback(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(approve ? 'Change order approved' : 'Change order declined'),
@@ -169,32 +226,22 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(16),
                 ),
-                child: Image.network(
-                  data['photo_url'] ?? '',
+                child: CachedNetworkImage(
+                  imageUrl: data['photo_url'] ?? '',
                   width: double.infinity,
                   height: 280,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
+                  placeholder: (context, url) => Container(
+                    height: 280,
+                    color: Colors.grey[200],
+                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                  errorWidget: (context, url, error) {
                     return Container(
                       height: 280,
                       color: Colors.grey[200],
                       child: const Center(
                         child: Icon(Icons.broken_image, size: 50),
-                      ),
-                    );
-                  },
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Container(
-                      height: 280,
-                      color: Colors.grey[100],
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                              : null,
-                        ),
                       ),
                     );
                   },
@@ -217,7 +264,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Photo Update',
+                        data['posted_by_name'] as String? ?? 'Photo Update',
                         style: TextStyle(
                           fontSize: 12,
                           color: Theme.of(context).colorScheme.primary,
@@ -225,6 +272,18 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                           letterSpacing: 0.5,
                         ),
                       ),
+                      if (data['posted_by_role'] != null) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          data['posted_by_role'] == 'foreman' ? 'Foreman'
+                            : data['posted_by_role'] == 'contractor' ? 'GC'
+                            : 'Worker',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
                       const Spacer(),
                       Text(
                         DateFormat('MMM d, h:mm a').format(date),
@@ -573,44 +632,70 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
     return Scaffold(
       extendBody: false,
       appBar: AppBar(
-        title: Text(widget.projectData['project_name'] ?? 'Project'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        title: Text(widget.isPreview ? 'Preview — Client View' : (widget.projectData['project_name'] ?? 'Project')),
+        backgroundColor: widget.isPreview ? Colors.amber[700] : Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.photo_library),
-            tooltip: 'Gallery View',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => EnhancedPhotoTimeline(
-                    projectId: widget.projectId,
-                    projectData: widget.projectData,
+          if (!widget.isPreview)
+            IconButton(
+              icon: const Icon(Icons.photo_library),
+              tooltip: 'Gallery View',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EnhancedPhotoTimeline(
+                      projectId: widget.projectId,
+                      projectData: widget.projectData,
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.chat_bubble_outline),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProjectChatScreen(
-                    projectId: widget.projectId,
-                    projectName: widget.projectData['project_name'] ?? 'Project',
-                    isContractor: false,
+                );
+              },
+            ),
+          if (!widget.isPreview)
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProjectChatScreen(
+                      projectId: widget.projectId,
+                      projectName: widget.projectData['project_name'] ?? 'Project',
+                      isContractor: false,
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
+                );
+              },
+            ),
         ],
       ),
       body: Column(
         children: [
+          // Preview mode banner
+          if (widget.isPreview)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: Colors.amber[100],
+              child: Row(
+                children: [
+                  Icon(Icons.visibility, size: 18, color: Colors.amber[900]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This is what your client sees',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.amber[900],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Contractor branding/info card
           ContractorInfoCard(
             projectData: widget.projectData,
@@ -618,7 +703,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
           ),
 
           // Review prompt banner (if project completed and no review yet)
-          if (widget.projectData['status'] == 'completed')
+          if (!widget.isPreview && widget.projectData['status'] == 'completed')
             FutureBuilder<bool>(
               future: _hasLeftReview(),
               builder: (context, snapshot) {
@@ -928,7 +1013,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                                 Text(
                                   photoCount > 0
                                       ? '$photoCount photo${photoCount == 1 ? '' : 's'} • Latest updates from your project'
-                                      : 'No photos yet',
+                                      : 'Your contractor will post progress photos here',
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.9),
                                     fontSize: 13,
@@ -954,12 +1039,14 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
           // Combined Timeline: Milestones + Activity
           Expanded(
             child: DefaultTabController(
-              length: 2,
+              length: 5,
               child: Column(
                 children: [
                   Container(
                     color: Colors.white,
                     child: TabBar(
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.center,
                       labelColor: Theme.of(context).colorScheme.primary,
                       unselectedLabelColor: Colors.grey,
                       indicatorColor: Theme.of(context).colorScheme.primary,
@@ -1016,6 +1103,9 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                             ],
                           ),
                         ),
+                        const Tab(text: 'Expenses'),
+                        const Tab(text: 'Docs'),
+                        const Tab(text: 'Time'),
                       ],
                     ),
                   ),
@@ -1049,7 +1139,16 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                                 // Show loading only if both are waiting
                                 if (updatesSnapshot.connectionState == ConnectionState.waiting &&
                                     ordersSnapshot.connectionState == ConnectionState.waiting) {
-                                  return const Center(child: CircularProgressIndicator());
+                                  return Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      children: const [
+                                        SkeletonListTile(),
+                                        SkeletonListTile(),
+                                        SkeletonListTile(),
+                                      ],
+                                    ),
+                                  );
                                 }
 
                                 final updates = updatesSnapshot.data?.docs ?? [];
@@ -1106,11 +1205,12 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                                           ),
                                           const SizedBox(height: 8),
                                           Text(
-                                            'Photo updates and change orders will appear here',
+                                            'Your contractor will post progress photos and updates here. You\'ll get a notification when new activity is added.',
                                             textAlign: TextAlign.center,
                                             style: TextStyle(
                                               fontSize: 14,
                                               color: Colors.grey[500],
+                                              height: 1.4,
                                             ),
                                           ),
                                         ],
@@ -1138,6 +1238,21 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                               },
                             );
                           },
+                        ),
+                        // Tab 3: Expenses (read-only for client)
+                        ExpensesTabWidget(
+                          projectId: widget.projectId,
+                          canAddExpense: false,
+                        ),
+                        // Tab 4: Documents (read-only for client)
+                        DocumentsTabWidget(
+                          projectId: widget.projectId,
+                          canManage: false,
+                        ),
+                        // Tab 5: Time (read-only for client)
+                        TimeTabWidget(
+                          projectId: widget.projectId,
+                          canLogTime: false,
                         ),
                       ],
                     ),
@@ -1178,14 +1293,15 @@ class _FullScreenImage extends StatelessWidget {
           Expanded(
             child: Center(
               child: InteractiveViewer(
-                child: Image.network(
-                  imageUrl,
+                child: CachedNetworkImage(
+                  imageUrl: imageUrl,
                   fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Center(
-                      child: Icon(Icons.broken_image, size: 100, color: Colors.white),
-                    );
-                  },
+                  placeholder: (context, url) => const Center(
+                    child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
+                  ),
+                  errorWidget: (context, url, error) => const Center(
+                    child: Icon(Icons.broken_image, size: 100, color: Colors.white),
+                  ),
                 ),
               ),
             ),

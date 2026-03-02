@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../backend/schema/milestone_record.dart';
+import 'request_changes_bottom_sheet.dart';
 
 class MilestoneListWidget extends StatelessWidget {
   final String projectId;
@@ -316,7 +317,18 @@ class MilestoneListWidget extends StatelessWidget {
                                   Expanded(
                                     child: OutlinedButton.icon(
                                       onPressed: () {
-                                        // TODO: Request changes
+                                        showModalBottomSheet(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          shape: const RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                          ),
+                                          builder: (context) => RequestChangesBottomSheet(
+                                            projectId: projectId,
+                                            milestoneId: milestone.milestoneId,
+                                            milestoneName: milestone.name,
+                                          ),
+                                        );
                                       },
                                       icon: const Icon(Icons.edit, size: 16),
                                       label: const Text('Changes'),

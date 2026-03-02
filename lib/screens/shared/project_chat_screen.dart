@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import '../../services/notification_service.dart';
 
 class ProjectChatScreen extends StatefulWidget {
   final String projectId;
   final String projectName;
   final bool isContractor;
+  final bool embedded;
 
   const ProjectChatScreen({
     super.key,
     required this.projectId,
     required this.projectName,
     required this.isContractor,
+    this.embedded = false,
   });
 
   @override
@@ -54,6 +57,15 @@ class _ProjectChatScreenState extends State<ProjectChatScreen> {
 
       _messageController.clear();
 
+      // Notify the other party about the new message
+      if (!widget.isContractor) {
+        NotificationService.sendChatMessageNotification(
+          projectId: widget.projectId,
+          projectName: widget.projectName,
+          messagePreview: text,
+        );
+      }
+
       // Scroll to bottom after sending
       Future.delayed(const Duration(milliseconds: 100), () {
         if (_scrollController.hasClients) {
@@ -81,21 +93,7 @@ class _ProjectChatScreenState extends State<ProjectChatScreen> {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
 
-    return Scaffold(
-      extendBody: false,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.projectName),
-            const Text(
-              'Messages',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-            ),
-          ],
-        ),
-      ),
-      body: Column(
+    final body = Column(
         children: [
           // Messages list
           Expanded(
@@ -262,7 +260,26 @@ class _ProjectChatScreenState extends State<ProjectChatScreen> {
             ),
           ),
         ],
+    );
+
+    if (widget.embedded) return body;
+
+
+    return Scaffold(
+      extendBody: false,
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.projectName),
+            const Text(
+              'Messages',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+            ),
+          ],
+        ),
       ),
+      body: body,
     );
   }
 

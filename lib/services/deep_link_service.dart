@@ -14,6 +14,8 @@ class DeepLinkService {
   final _appLinks = AppLinks();
   StreamSubscription? _linkSubscription;
   String? _pendingProjectId;
+  String? _pendingTeamId;
+  String? _pendingMemberId;
 
   /// Initialize deep link listening
   void initialize(BuildContext context) {
@@ -52,15 +54,33 @@ class DeepLinkService {
 
     // Handle invite links: projectpulse://join/{projectId}
     // or https://projectpulsehub.com/join/{projectId}
+    // Team invites use: https://projectpulsehub.com/join/team?t={teamId}&m={memberId}
     if ((firstSegment == 'join' || firstSegment == 'invite') && uri.pathSegments.length > 1) {
-      final projectId = uri.pathSegments[1];
-      _handleProjectInvite(context, projectId);
+      final secondSegment = uri.pathSegments[1];
+
+      // Check if this is a team invite: /join/team?t=xxx&m=xxx
+      if (secondSegment == 'team' &&
+          uri.queryParameters.containsKey('t') &&
+          uri.queryParameters.containsKey('m')) {
+        _handleTeamInvite(
+            context, uri.queryParameters['t']!, uri.queryParameters['m']!);
+      } else {
+        final projectId = secondSegment;
+        _handleProjectInvite(context, projectId);
+      }
     }
 
     // Handle project links: https://projectpulsehub.com/project/{projectId}
     else if (firstSegment == 'project' && uri.pathSegments.length > 1) {
       final projectId = uri.pathSegments[1];
       _handleProjectInvite(context, projectId);
+    }
+
+    // Handle team invite links (legacy): projectpulse://team/{teamId}/invite/{memberId}
+    else if (firstSegment == 'team' && uri.pathSegments.length >= 4 && uri.pathSegments[2] == 'invite') {
+      final teamId = uri.pathSegments[1];
+      final memberId = uri.pathSegments[3];
+      _handleTeamInvite(context, teamId, memberId);
     }
 
     // Handle contractor profile links: projectpulse://contractor/{contractorId}
@@ -84,6 +104,104 @@ class DeepLinkService {
 
     // User is logged in - navigate to project
     await _navigateToProject(context, projectId, user);
+  }
+
+  /// Handle team invite link
+  Future<void> _handleTeamInvite(BuildContext context, String teamId, String memberId) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      // Store pending invite — will be processed after signup/login
+      _pendingTeamId = teamId;
+      _pendingMemberId = memberId;
+      return;
+    }
+
+    await _linkTeamMember(context, teamId, memberId, user);
+  }
+
+  /// Link a user to a team member doc after auth
+  Future<void> _linkTeamMember(BuildContext context, String teamId, String memberId, User user) async {
+    try {
+      final teamRef = FirebaseFirestore.instance.collection('teams').doc(teamId);
+      final memberRef = teamRef.collection('members').doc(memberId);
+
+      // Verify member doc exists and is not already linked
+      final memberDoc = await memberRef.get();
+      if (!memberDoc.exists) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invite not found. Ask your GC to re-send.')),
+          );
+        }
+        return;
+      }
+
+      final memberData = memberDoc.data()!;
+      if (memberData['user_uid'] != null && memberData['user_uid'] != user.uid) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('This invite has already been used by another account.')),
+          );
+        }
+        return;
+      }
+
+      // Already linked to this user — just navigate
+      if (memberData['user_uid'] == user.uid) {
+        return;
+      }
+
+      // Link the member: set user_uid and status
+      await memberRef.update({
+        'user_uid': user.uid,
+        'status': 'active',
+      });
+
+      // Add uid to team's member_uids array
+      await teamRef.update({
+        'member_uids': FieldValue.arrayUnion([user.uid]),
+      });
+
+      // Create/update user doc with team_member role
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'user_id': user.uid,
+        'email': user.email,
+        'role': 'team_member',
+        'team_id': teamId,
+        'team_member_id': memberId,
+        'team_member_profile': {
+          'name': memberData['name'] ?? user.displayName ?? '',
+          'team_role': memberData['role'] ?? 'worker',
+        },
+        'created_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // Auto-assign to projects the GC pre-selected
+      final assignedProjectIds = (memberData['assigned_project_ids'] as List<dynamic>?) ?? [];
+      for (final projectId in assignedProjectIds) {
+        try {
+          await FirebaseFirestore.instance
+              .collection('projects')
+              .doc(projectId as String)
+              .update({
+            'assigned_member_uids': FieldValue.arrayUnion([user.uid]),
+          });
+        } catch (e) {
+          debugPrint('Error assigning to project $projectId: $e');
+        }
+      }
+
+      // Navigation happens automatically via AuthWrapper -> RoleDetectionScreen
+      // which streams the user doc and routes on role: 'team_member'
+    } catch (e) {
+      debugPrint('Error linking team member: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error joining team: $e')),
+        );
+      }
+    }
   }
 
   /// Navigate to project after auth
@@ -185,16 +303,61 @@ class DeepLinkService {
     }
   }
 
-  /// Check if there's a pending project invite after login
+  /// Check if there's a pending invite (project or team) after login
   Future<void> handlePendingInvite(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Check deep-link based pending invites
     if (_pendingProjectId != null) {
       final projectId = _pendingProjectId!;
-      _pendingProjectId = null; // Clear it
+      _pendingProjectId = null;
+      await _navigateToProject(context, projectId, user);
+    }
 
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await _navigateToProject(context, projectId, user);
-      }
+    if (_pendingTeamId != null && _pendingMemberId != null) {
+      final teamId = _pendingTeamId!;
+      final memberId = _pendingMemberId!;
+      _pendingTeamId = null;
+      _pendingMemberId = null;
+      await _linkTeamMember(context, teamId, memberId, user);
+      return; // Already linked via deep link, skip email check
+    }
+
+    // Email-based auto-linking: check if user's email matches a pending team invite
+    await _checkEmailBasedTeamInvite(context, user);
+  }
+
+  /// Check if the user's email matches a pending team member invite
+  Future<void> _checkEmailBasedTeamInvite(BuildContext context, User user) async {
+    try {
+      // Skip if user already has a role (existing user, not a new sign-in)
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (userDoc.exists && userDoc.data()?['role'] != null) return;
+
+      // Query all teams' members subcollections for matching email
+      final memberQuery = await FirebaseFirestore.instance
+          .collectionGroup('members')
+          .where('email', isEqualTo: user.email)
+          .where('status', isEqualTo: 'invited')
+          .limit(1)
+          .get();
+
+      if (memberQuery.docs.isEmpty) return;
+
+      final memberDoc = memberQuery.docs.first;
+      final memberData = memberDoc.data();
+
+      // Get the team ID from the document path: teams/{teamId}/members/{memberId}
+      final teamId = memberDoc.reference.parent.parent!.id;
+      final memberId = memberDoc.id;
+
+      await _linkTeamMember(context, teamId, memberId, user);
+    } catch (e) {
+      debugPrint('Error checking email-based team invite: $e');
     }
   }
 
@@ -202,6 +365,12 @@ class DeepLinkService {
   String generateInviteLink(String projectId) {
     // Simple HTTPS link that works with App Links
     return 'https://projectpulsehub.com/join/$projectId';
+  }
+
+  /// Generate invite link for a team member
+  /// Uses the same /join path as client links (which already works in SMS)
+  String generateTeamInviteLink(String teamId, String memberId) {
+    return 'https://projectpulsehub.com/join/team?t=$teamId&m=$memberId';
   }
 
   /// Dispose subscriptions

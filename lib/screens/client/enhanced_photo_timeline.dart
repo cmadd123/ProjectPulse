@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 /// Enhanced photo timeline with Instagram Stories-style full-screen viewer
 class EnhancedPhotoTimeline extends StatefulWidget {
   final String projectId;
   final Map<String, dynamic> projectData;
+  final bool showAppBar;
 
   const EnhancedPhotoTimeline({
     super.key,
     required this.projectId,
     required this.projectData,
+    this.showAppBar = true,
   });
 
   @override
@@ -34,6 +37,36 @@ class _EnhancedPhotoTimelineState extends State<EnhancedPhotoTimeline> with Sing
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.showAppBar) {
+      // Embedded mode: no Scaffold/AppBar
+      return Column(
+        children: [
+          Material(
+            color: Theme.of(context).colorScheme.primary,
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: Colors.white,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
+              tabs: const [
+                Tab(text: 'By Milestone'),
+                Tab(text: 'All Photos'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildMilestoneGroupedView(),
+                _buildAllPhotosView(),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Photo Timeline'),
@@ -137,15 +170,6 @@ class _EnhancedPhotoTimelineState extends State<EnhancedPhotoTimeline> with Sing
             return const Center(child: CircularProgressIndicator());
           }
 
-          // Debug logging to console
-          print('DEBUG PHOTO TIMELINE: Connection state: ${snapshot.connectionState}');
-          print('DEBUG PHOTO TIMELINE: Has data: ${snapshot.hasData}');
-          print('DEBUG PHOTO TIMELINE: Docs count: ${snapshot.data?.docs.length ?? 0}');
-
-          if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-            print('DEBUG PHOTO TIMELINE: First doc data: ${snapshot.data!.docs.first.data()}');
-          }
-
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return Center(
               child: Padding(
@@ -225,47 +249,9 @@ class _EnhancedPhotoTimelineState extends State<EnhancedPhotoTimeline> with Sing
           }
 
           final updates = snapshot.data!.docs;
-          print('DEBUG PHOTO TIMELINE: Rendering ${updates.length} photos');
 
           return Column(
             children: [
-              // On-screen debug when photos exist
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(8),
-                color: Colors.green[50],
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Debug: ${updates.length} photos found',
-                      style: TextStyle(fontSize: 10, color: Colors.green[900], fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      'Query: projects/${widget.projectId}/updates',
-                      style: TextStyle(fontSize: 9, color: Colors.green[700]),
-                    ),
-                    if (updates.isNotEmpty) ...[
-                      Text(
-                        'First photo ID: ${updates.first.id}',
-                        style: TextStyle(fontSize: 9, color: Colors.green[700]),
-                      ),
-                      Text(
-                        'created_at: ${(updates.first.data() as Map<String, dynamic>)['created_at']}',
-                        style: TextStyle(fontSize: 8, color: Colors.green[600]),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        'caption: ${(updates.first.data() as Map<String, dynamic>)['caption']}',
-                        style: TextStyle(fontSize: 8, color: Colors.green[600]),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
               Expanded(
                 child: GridView.builder(
             padding: const EdgeInsets.all(16),
@@ -300,19 +286,17 @@ class _EnhancedPhotoTimelineState extends State<EnhancedPhotoTimeline> with Sing
                     fit: StackFit.expand,
                     children: [
                       photoUrl != null
-                          ? Image.network(
-                              photoUrl,
+                          ? CachedNetworkImage(
+                              imageUrl: photoUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: Colors.grey[200],
-                                  child: Icon(
-                                    Icons.broken_image,
-                                    size: 50,
-                                    color: Colors.grey[400],
-                                  ),
-                                );
-                              },
+                              placeholder: (context, url) => Container(
+                                color: Colors.grey[200],
+                                child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                              ),
+                              errorWidget: (context, url, error) => Container(
+                                color: Colors.grey[200],
+                                child: Icon(Icons.broken_image, size: 50, color: Colors.grey[400]),
+                              ),
                             )
                           : Container(
                               color: Colors.grey[200],
@@ -530,16 +514,15 @@ class _StoryStylePhotoViewerState extends State<StoryStylePhotoViewer> {
                             child: InteractiveViewer(
                               minScale: 0.5,
                               maxScale: 4.0,
-                              child: Image.network(
-                                photoUrl,
+                              child: CachedNetworkImage(
+                                imageUrl: photoUrl,
                                 fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return const Icon(
-                                    Icons.broken_image,
-                                    size: 100,
-                                    color: Colors.white54,
-                                  );
-                                },
+                                placeholder: (context, url) => const Center(
+                                  child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
+                                ),
+                                errorWidget: (context, url, error) => const Icon(
+                                  Icons.broken_image, size: 100, color: Colors.white54,
+                                ),
                               ),
                             ),
                           )
@@ -879,25 +862,6 @@ class _MilestoneCard extends StatelessWidget {
         final photoCount = updatesSnapshot.hasData ? updatesSnapshot.data!.docs.length : 0;
         final updates = updatesSnapshot.hasData ? updatesSnapshot.data!.docs : <QueryDocumentSnapshot>[];
 
-        // DEBUG: Show query info for milestone
-        if (kDebugMode) {
-          print('=== MILESTONE QUERY DEBUG ===');
-          print('Milestone: $milestoneTitle');
-          print('Milestone Ref: ${milestoneRef.path}');
-          print('Photos found: $photoCount');
-          print('Connection state: ${updatesSnapshot.connectionState}');
-          if (photoCount > 0) {
-            for (var doc in updates) {
-              final data = doc.data() as Map<String, dynamic>;
-              print('Photo ${doc.id}:');
-              print('  created_at: ${data['created_at']}');
-              print('  milestone_ref: ${data['milestone_ref']}');
-              print('  milestone_ref path: ${(data['milestone_ref'] as DocumentReference?)?.path ?? "NULL"}');
-              print('  caption: ${data['caption']}');
-            }
-          }
-        }
-
         return Card(
           margin: const EdgeInsets.only(bottom: 16),
           elevation: 2,
@@ -975,8 +939,8 @@ class _MilestoneCard extends StatelessWidget {
                                 children: [
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      (updates[index].data() as Map<String, dynamic>)['photo_url'],
+                                    child: CachedNetworkImage(
+                                      imageUrl: (updates[index].data() as Map<String, dynamic>)['photo_url'] ?? '',
                                       fit: BoxFit.cover,
                                     ),
                                   ),
@@ -1006,8 +970,8 @@ class _MilestoneCard extends StatelessWidget {
                             margin: const EdgeInsets.only(right: 8),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                (updates[index].data() as Map<String, dynamic>)['photo_url'],
+                              child: CachedNetworkImage(
+                                imageUrl: (updates[index].data() as Map<String, dynamic>)['photo_url'] ?? '',
                                 fit: BoxFit.cover,
                               ),
                             ),
