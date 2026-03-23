@@ -1,0 +1,62 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user is the project owner (contractor)
+    function isProjectOwner(projectId) {
+      return isAuthenticated() &&
+             firestore.get(/databases/(default)/documents/projects/$(projectId)).data.contractor_uid == request.auth.uid;
+    }
+
+    // Helper function to check if user is the project client
+    function isProjectClient(projectId) {
+      return isAuthenticated() &&
+             firestore.get(/databases/(default)/documents/projects/$(projectId)).data.client_user_ref == /databases/(default)/documents/users/$(request.auth.uid);
+    }
+
+    // Helper function to check if user can access the project
+    function canAccessProject(projectId) {
+      return isProjectOwner(projectId) || isProjectClient(projectId);
+    }
+
+    // Project photos/updates (contractor uploads)
+    match /projects/{projectId}/updates/{fileName} {
+      allow read: if true; // Anyone can read (for public sharing)
+      allow write: if isProjectOwner(projectId);
+    }
+
+    // Quality issue photos (client uploads)
+    match /projects/{projectId}/quality_issues/{fileName} {
+      allow read: if canAccessProject(projectId);
+      allow write: if isProjectClient(projectId);
+    }
+
+    // Addition request photos (client uploads)
+    match /projects/{projectId}/addition_requests/{fileName} {
+      allow read: if canAccessProject(projectId);
+      allow write: if isProjectClient(projectId);
+    }
+
+    // Contractor profile photos
+    match /contractors/{contractorId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.uid == contractorId;
+    }
+
+    // Invoices (auto-generated when client approves milestone)
+    match /invoices/{projectId}/{fileName} {
+      allow read: if canAccessProject(projectId);
+      // Allow both contractor AND client to write (client triggers invoice during approval)
+      allow write: if canAccessProject(projectId);
+    }
+
+    // Default: deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
