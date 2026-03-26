@@ -226,8 +226,11 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
       );
     }
 
-    nameController.dispose();
-    emailController.dispose();
+    // Dispose controllers after a brief delay to avoid "dependents.isEmpty" error
+    Future.delayed(const Duration(milliseconds: 100), () {
+      nameController.dispose();
+      emailController.dispose();
+    });
   }
 
   Future<void> _addMember(String name, String email, String role) async {

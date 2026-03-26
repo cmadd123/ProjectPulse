@@ -89,6 +89,15 @@ class DeepLinkService {
       final contractorId = uri.pathSegments[1];
       _handleContractorProfile(context, contractorId);
     }
+
+    // Handle app homepage link: projectpulse://app or https://projectpulse-7d258.web.app/app
+    // This just opens the app to whatever the user's homepage is (contractor or client)
+    // The app's RoleDetectionScreen will automatically route to the correct home
+    else if (firstSegment == 'app') {
+      // No action needed - app will open to homepage automatically
+      // RoleDetectionScreen handles routing based on user role
+      debugPrint('Deep link: Opening app to homepage');
+    }
   }
 
   /// Handle project invite link

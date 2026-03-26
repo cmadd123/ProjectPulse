@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../backend/schema/milestone_record.dart';
-import 'request_changes_bottom_sheet.dart';
+import 'change_type_selector_bottom_sheet.dart';
 
 class MilestoneListWidget extends StatelessWidget {
   final String projectId;
@@ -323,7 +323,7 @@ class MilestoneListWidget extends StatelessWidget {
                                           shape: const RoundedRectangleBorder(
                                             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                                           ),
-                                          builder: (context) => RequestChangesBottomSheet(
+                                          builder: (context) => ChangeTypeSelectorBottomSheet(
                                             projectId: projectId,
                                             milestoneId: milestone.milestoneId,
                                             milestoneName: milestone.name,

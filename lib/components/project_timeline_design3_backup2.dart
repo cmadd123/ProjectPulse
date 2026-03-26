@@ -15,9 +15,47 @@ import 'change_type_selector_bottom_sheet.dart';
 // import 'contractor_addition_requests_card.dart';
 // import 'client_addition_requests_card.dart';
 
-// v0.0.54: Simplified timeline (Option B) - smaller circles, no connecting lines
+// Design 3: Clean milestone page matching home page aesthetic
+//
+// VISUAL PREVIEW:
+// ┌─────────────────────────────────────────────┐
+// │  Project Phases                             │
+// │  3 of 5 milestones completed                │  <- Clean white header card
+// │  Making steady progress                     │     (subtle shadow, 16px rounded)
+// └─────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────┐
+// │  Foundation & Framing            $6,000     │  <- Clean white milestone card
+// │  Phase 1 of 3                               │     (NO timeline circles)
+// │  Demo, framing, and structural work         │     (subtle shadow, 16px rounded)
+// │  ✅ Completed Mar 11                        │     (emoji status indicators)
+// └─────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────┐
+// │  🔨 Electrical                   $3,500     │  <- Active milestone
+// │  Phase 2 of 3                               │     (subtle blue border)
+// │  Rough-in and panel install                 │     (light blue background tint)
+// │  Started 2 days ago                         │
+// │  [Mark Complete] [Add Update]               │
+// └─────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────┐
+// │  ⏱️ Plumbing                     $4,000     │  <- Pending milestone
+// │  Phase 3 of 3                               │     (grey emoji, collapsed)
+// │  Tap to expand                              │
+// └─────────────────────────────────────────────┘
+//
+// KEY CHANGES:
+// - Header card with progress message (warm, encouraging)
+// - Remove timeline circles on the left
+// - Clean white cards with subtle shadows (matching home page)
+// - 16px margins, 16px border radius
+// - Emoji status indicators (✅ 🔨 ⏱️)
+// - Light grey page background (Colors.grey[50])
+// - Collapsed by default for pending/completed (cleaner)
+// - Active milestones expanded with subtle border + tint
 
-class ProjectTimelineWidget extends StatelessWidget {
+class ProjectTimelineDesign3 extends StatelessWidget {
   final String projectId;
   final Map<String, dynamic> projectData;
   final String userRole; // "contractor" or "client"
@@ -25,7 +63,7 @@ class ProjectTimelineWidget extends StatelessWidget {
   final bool isPreview; // Preview mode (contractor viewing as client) - disables actions
   final Function(String milestoneId, String milestoneName)? onAddPhotoUpdate; // Callback for photo upload
 
-  const ProjectTimelineWidget({
+  const ProjectTimelineDesign3({
     super.key,
     required this.projectId,
     required this.projectData,
@@ -861,7 +899,10 @@ class ProjectTimelineWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<MilestoneRecord>>(
+    // Design 3: Light grey background matching home page
+    return Container(
+      color: Colors.grey[50],
+      child: StreamBuilder<List<MilestoneRecord>>(
       stream: MilestoneRecord.getMilestones(projectId),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
@@ -926,6 +967,7 @@ class ProjectTimelineWidget extends StatelessWidget {
           },
         );
       },
+      ),
     );
   }
 }

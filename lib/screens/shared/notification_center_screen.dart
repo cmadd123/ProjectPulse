@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../contractor/project_details_screen.dart';
 import '../client/client_project_timeline.dart';
+import '../../components/client_changes_activity_widget.dart';
+import '../shared/project_chat_screen.dart';
 
 class NotificationCenterScreen extends StatelessWidget {
   const NotificationCenterScreen({super.key});
@@ -12,9 +14,28 @@ class NotificationCenterScreen extends StatelessWidget {
       case 'photo_update':
         return Icons.camera_alt;
       case 'change_order':
+      case 'change_order_approved':
+      case 'change_order_declined':
         return Icons.request_quote;
       case 'milestone_completed':
+      case 'milestone_approved':
+      case 'milestone_started':
         return Icons.check_circle;
+      case 'changes_requested':
+        return Icons.edit_note;
+      case 'chat_message':
+        return Icons.chat_bubble;
+      case 'quality_issue_reported':
+      case 'quality_issue_fixed':
+        return Icons.report_problem;
+      case 'addition_requested':
+      case 'addition_quoted':
+      case 'addition_approved':
+        return Icons.add_circle;
+      case 'payment_processed':
+        return Icons.payment;
+      case 'project_completed':
+        return Icons.celebration;
       default:
         return Icons.notifications;
     }
@@ -25,8 +46,27 @@ class NotificationCenterScreen extends StatelessWidget {
       case 'photo_update':
         return Colors.blue;
       case 'change_order':
+      case 'change_order_approved':
+      case 'change_order_declined':
         return Colors.orange;
       case 'milestone_completed':
+      case 'milestone_approved':
+      case 'milestone_started':
+        return Colors.green;
+      case 'changes_requested':
+        return Colors.amber;
+      case 'chat_message':
+        return Colors.purple;
+      case 'quality_issue_reported':
+      case 'quality_issue_fixed':
+        return const Color(0xFFEF4444); // Red
+      case 'addition_requested':
+      case 'addition_quoted':
+      case 'addition_approved':
+        return const Color(0xFF3B82F6); // Blue
+      case 'payment_processed':
+        return Colors.teal;
+      case 'project_completed':
         return Colors.green;
       default:
         return Colors.grey;
@@ -60,7 +100,12 @@ class NotificationCenterScreen extends StatelessWidget {
     await ref.update({'read': true});
   }
 
-  Future<void> _navigateToProject(BuildContext context, Map<String, dynamic> data, String userRole) async {
+  Future<void> _navigateToNotification(
+    BuildContext context,
+    String type,
+    Map<String, dynamic> data,
+    String userRole,
+  ) async {
     final projectId = data['project_id'] as String?;
     if (projectId == null) return;
 
@@ -73,26 +118,69 @@ class NotificationCenterScreen extends StatelessWidget {
 
     if (!context.mounted) return;
 
-    if (userRole == 'contractor') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ProjectDetailsScreen(
-            projectId: projectId,
-            projectData: projectData,
+    // Handle specific notification types with deep linking
+    switch (type) {
+      case 'quality_issue_reported':
+      case 'quality_issue_fixed':
+      case 'addition_requested':
+      case 'addition_quoted':
+      case 'addition_approved':
+        // Navigate to My Requests screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(
+                title: const Text('My Requests'),
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Colors.white,
+              ),
+              body: ClientChangesActivityWidget(
+                projectId: projectId,
+                userRole: userRole,
+              ),
+            ),
           ),
-        ),
-      );
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ClientProjectTimeline(
-            projectId: projectId,
-            projectData: projectData,
+        );
+        break;
+
+      case 'chat_message':
+        // Navigate to project chat
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProjectChatScreen(
+              projectId: projectId,
+              projectName: projectData['project_name'] ?? 'Project',
+              isContractor: userRole == 'contractor',
+            ),
           ),
-        ),
-      );
+        );
+        break;
+
+      default:
+        // Default: Navigate to project timeline
+        if (userRole == 'contractor') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProjectDetailsScreen(
+                projectId: projectId,
+                projectData: projectData,
+              ),
+            ),
+          );
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ClientProjectTimeline(
+                projectId: projectId,
+                projectData: projectData,
+              ),
+            ),
+          );
+        }
     }
   }
 
@@ -126,7 +214,8 @@ class NotificationCenterScreen extends StatelessWidget {
                 .limit(50)
                 .snapshots(),
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+              // Only show loading on first load, not on subsequent updates
+              if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
 
@@ -204,7 +293,7 @@ class NotificationCenterScreen extends StatelessWidget {
                     ),
                     onTap: () {
                       if (!isRead) _markRead(doc.reference);
-                      _navigateToProject(context, data, userRole);
+                      _navigateToNotification(context, type, data, userRole);
                     },
                   );
                 },

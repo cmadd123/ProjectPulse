@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../backend/schema/milestone_record.dart';
 import '../../models/milestone_templates.dart';
+import '../../services/notification_service.dart';
 import 'package:intl/intl.dart';
 
 class CreateMilestonesScreen extends StatefulWidget {
@@ -36,13 +37,19 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
     final template = MilestoneTemplates.getTemplateByName(templateName);
     if (template != null) {
       setState(() {
+        // Dispose old controllers before creating new ones
+        for (final milestone in milestones) {
+          milestone.nameController.dispose();
+          milestone.descriptionController.dispose();
+        }
+
         selectedTemplate = templateName;
         milestones = template.milestones
             .asMap()
             .entries
             .map((entry) => _MilestoneItem(
-                  nameController: TextEditingController(),
-                  descriptionController: TextEditingController(),
+                  nameController: TextEditingController(text: entry.value.name),
+                  descriptionController: TextEditingController(text: entry.value.description),
                   nameHint: entry.value.name,
                   descriptionHint: entry.value.description,
                   percentage: entry.value.percentage,
@@ -160,6 +167,21 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
         'payment_status': 'unpaid',
       });
 
+      // Get project name for notification
+      final projectDoc = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId)
+          .get();
+      final projectData = projectDoc.data();
+      final projectName = projectData?['project_name'] as String? ?? 'Project';
+
+      // Notify client that milestone schedule was created
+      NotificationService.sendMilestoneScheduleCreatedNotification(
+        projectId: widget.projectId,
+        projectName: projectName,
+        milestoneCount: milestones.length,
+      );
+
       if (mounted) {
         Navigator.pop(context, true); // Return success
       }
@@ -241,10 +263,11 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
 
           // Template selector — hides when keyboard is open
           if (MediaQuery.of(context).viewInsets.bottom == 0) ...[
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            SizedBox(
+              height: 220, // Constrain template section height
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                physics: const AlwaysScrollableScrollPhysics(),
                 children: [
                   const Text(
                     'What type of project?',
@@ -322,7 +345,6 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
                 ],
               ),
             ),
-
             const Divider(height: 1),
           ],
 

@@ -250,15 +250,12 @@ class _EnhancedPhotoTimelineState extends State<EnhancedPhotoTimeline> with Sing
 
           final updates = snapshot.data!.docs;
 
-          return Column(
-            children: [
-              Expanded(
-                child: GridView.builder(
+          return GridView.builder(
             padding: const EdgeInsets.all(16),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
               childAspectRatio: 1,
             ),
             itemCount: updates.length,
@@ -280,100 +277,111 @@ class _EnhancedPhotoTimelineState extends State<EnhancedPhotoTimeline> with Sing
                     ),
                   );
                 },
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      photoUrl != null
-                          ? CachedNetworkImage(
-                              imageUrl: photoUrl,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: Colors.grey[200],
-                                child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                color: Colors.grey[200],
-                                child: Icon(Icons.broken_image, size: 50, color: Colors.grey[400]),
-                              ),
-                            )
-                          : Container(
-                              color: Colors.grey[200],
-                              child: Icon(
-                                Icons.image,
-                                size: 50,
-                                color: Colors.grey[400],
-                              ),
-                            ),
-                      // Gradient overlay
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withOpacity(0.4),
-                            ],
-                          ),
-                        ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
-                      // Photo number badge
-                      Positioned(
-                        bottom: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        photoUrl != null
+                            ? CachedNetworkImage(
+                                imageUrl: photoUrl,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: Colors.grey[100],
+                                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: Colors.grey[100],
+                                  child: Icon(Icons.broken_image_outlined, size: 40, color: Colors.grey[400]),
+                                ),
+                              )
+                            : Container(
+                                color: Colors.grey[100],
+                                child: Icon(
+                                  Icons.image_outlined,
+                                  size: 40,
+                                  color: Colors.grey[400],
+                                ),
+                              ),
+                        // Gradient overlay
+                        Container(
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${index + 1}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withOpacity(0.5),
+                              ],
+                              stops: const [0.5, 1.0],
                             ),
                           ),
                         ),
-                      ),
-                      // Date badge
-                      if (createdAt != null)
+                        // Photo number badge
                         Positioned(
-                          top: 8,
-                          left: 8,
+                          bottom: 10,
+                          right: 10,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 3,
+                              horizontal: 10,
+                              vertical: 5,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.black.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              _formatDateShort(createdAt),
+                              '${index + 1}',
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
                         ),
-                    ],
+                        // Date badge
+                        if (createdAt != null)
+                          Positioned(
+                            top: 10,
+                            left: 10,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                _formatDateShort(createdAt),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               );
             },
-                ),
-              ),
-            ],
           );
         },
       );
@@ -862,11 +870,18 @@ class _MilestoneCard extends StatelessWidget {
         final photoCount = updatesSnapshot.hasData ? updatesSnapshot.data!.docs.length : 0;
         final updates = updatesSnapshot.hasData ? updatesSnapshot.data!.docs : <QueryDocumentSnapshot>[];
 
-        return Card(
+        return Container(
           margin: const EdgeInsets.only(bottom: 16),
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: InkWell(
             onTap: photoCount > 0
@@ -884,9 +899,9 @@ class _MilestoneCard extends StatelessWidget {
                     );
                   }
                 : null,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -894,37 +909,37 @@ class _MilestoneCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          milestoneTitle.toUpperCase(),
+                          milestoneTitle,
                           style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
                           ),
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: _getStatusColor().withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: _getStatusColor()),
+                          color: _getStatusColor().withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           _getStatusText(),
                           style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
                             color: _getStatusColor(),
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   if (photoCount > 0) ...[
                     // Photo grid preview
                     SizedBox(
-                      height: 100,
+                      height: 110,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
                         itemCount: photoCount > 4 ? 4 : photoCount,
@@ -932,13 +947,13 @@ class _MilestoneCard extends StatelessWidget {
                           if (index == 3 && photoCount > 4) {
                             // Show "+X more" overlay on 4th photo
                             return Container(
-                              width: 100,
-                              margin: const EdgeInsets.only(right: 8),
+                              width: 110,
+                              margin: const EdgeInsets.only(right: 10),
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
                                   ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(12),
                                     child: CachedNetworkImage(
                                       imageUrl: (updates[index].data() as Map<String, dynamic>)['photo_url'] ?? '',
                                       fit: BoxFit.cover,
@@ -946,16 +961,16 @@ class _MilestoneCard extends StatelessWidget {
                                   ),
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.6),
-                                      borderRadius: BorderRadius.circular(8),
+                                      color: Colors.black.withOpacity(0.7),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Center(
                                       child: Text(
                                         '+${photoCount - 3}',
                                         style: const TextStyle(
                                           color: Colors.white,
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.w800,
                                         ),
                                       ),
                                     ),
@@ -966,27 +981,47 @@ class _MilestoneCard extends StatelessWidget {
                           }
 
                           return Container(
-                            width: 100,
-                            margin: const EdgeInsets.only(right: 8),
+                            width: 110,
+                            margin: const EdgeInsets.only(right: 10),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(12),
                               child: CachedNetworkImage(
                                 imageUrl: (updates[index].data() as Map<String, dynamic>)['photo_url'] ?? '',
                                 fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: Colors.grey[100],
+                                  child: const Center(
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: Colors.grey[100],
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    color: Colors.grey[400],
+                                    size: 30,
+                                  ),
+                                ),
                               ),
                             ),
                           );
                         },
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '$photoCount photo${photoCount == 1 ? '' : 's'}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(Icons.photo_library, size: 16, color: Colors.grey[400]),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$photoCount photo${photoCount == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(

@@ -15,6 +15,7 @@ import '../shared/project_chat_screen.dart';
 import '../client/enhanced_photo_timeline.dart';
 import '../../services/notification_service.dart';
 import '../../components/project_timeline_widget.dart';
+import '../../components/project_timeline_clean.dart';
 import '../../services/notification_service.dart';
 import '../../components/expenses_tab_widget.dart';
 import '../../components/add_expense_bottom_sheet.dart';
@@ -23,6 +24,9 @@ import '../../components/time_tab_widget.dart';
 import 'project_team_screen.dart';
 import '../client/client_project_timeline.dart';
 import '../../services/invoice_service.dart';
+import 'debug_tools_screen.dart';
+import '../../components/client_changes_activity_widget.dart';
+import '../../components/debug_console.dart';
 
 class ProjectDetailsScreen extends StatefulWidget {
   final String projectId;
@@ -650,28 +654,78 @@ Looking forward to working with you!
 
       // Upload to Firebase Storage
       final user = FirebaseAuth.instance.currentUser!;
+      debugPrint('Photo Upload - User UID: ${user.uid}');
+      debugPrint('Photo Upload - Project ID: ${widget.projectId}');
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'projects/${widget.projectId}/updates/$timestamp.jpg';
+      debugPrint('Photo Upload - Storage path: $fileName');
 
-      final storageRef = FirebaseStorage.instance.ref().child(fileName);
-      await storageRef.putData(compressedImage);
-      final downloadUrl = await storageRef.getDownloadURL();
+      String debugLog = '';
+      debugLog += 'User UID: ${user.uid}\n';
+      debugLog += 'Project ID: ${widget.projectId}\n';
+      debugLog += 'Storage path: $fileName\n\n';
 
-      // Save update to Firestore
-      await FirebaseFirestore.instance
-          .collection('projects')
-          .doc(widget.projectId)
-          .collection('updates')
-          .add({
-        'photo_url': downloadUrl,
-        'thumbnail_url': downloadUrl, // Use same for now, could create smaller version
-        'caption': _captionController.text.trim(),
-        'posted_by_ref': FirebaseFirestore.instance.collection('users').doc(user.uid),
-        'posted_by_name': user.displayName ?? 'Contractor',
-        'posted_by_role': 'contractor',
-        'created_at': Timestamp.now(), // Use client timestamp instead of server timestamp to avoid orderBy null issue
-        'milestone_ref': _selectedMilestone, // Can be null for "General/Other"
-      });
+      try {
+        final storageRef = FirebaseStorage.instance.ref().child(fileName);
+        debugLog += '✓ Storage reference created\n';
+        debugPrint('Photo Upload - Starting Firebase Storage upload...');
+
+        await storageRef.putData(compressedImage);
+        debugLog += '✓ Firebase Storage upload SUCCESS\n';
+        debugPrint('Photo Upload - Storage upload SUCCESS');
+
+        final downloadUrl = await storageRef.getDownloadURL();
+        debugLog += '✓ Download URL obtained\n';
+        debugPrint('Photo Upload - Download URL: $downloadUrl');
+
+        // Save update to Firestore
+        debugLog += '\nAttempting Firestore write...\n';
+        debugPrint('Photo Upload - Starting Firestore document creation...');
+        await FirebaseFirestore.instance
+            .collection('projects')
+            .doc(widget.projectId)
+            .collection('updates')
+            .add({
+          'photo_url': downloadUrl,
+          'thumbnail_url': downloadUrl, // Use same for now, could create smaller version
+          'caption': _captionController.text.trim(),
+          'posted_by_ref': FirebaseFirestore.instance.collection('users').doc(user.uid),
+          'posted_by_name': user.displayName ?? 'Contractor',
+          'posted_by_role': 'contractor',
+          'created_at': Timestamp.now(), // Use client timestamp instead of server timestamp to avoid orderBy null issue
+          'milestone_ref': _selectedMilestone, // Can be null for "General/Other"
+        });
+        debugLog += '✓ Firestore document created SUCCESS\n';
+        debugPrint('Photo Upload - Firestore document created SUCCESS');
+      } catch (uploadError) {
+        debugLog += '\n❌ ERROR:\n$uploadError\n';
+        debugPrint('Photo Upload - ERROR at upload stage: $uploadError');
+
+        // Show debug dialog
+        if (mounted) {
+          setState(() => _isUploading = false);
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Photo Upload Debug'),
+              content: SingleChildScrollView(
+                child: SelectableText(
+                  debugLog,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
 
       // Update project's updated_at timestamp
       await FirebaseFirestore.instance
@@ -1052,6 +1106,13 @@ Looking forward to working with you!
         'status': 'completed',
         'actual_end_date': FieldValue.serverTimestamp(),
       });
+
+      // Notify client that project is complete and request review
+      final projectName = widget.projectData['project_name'] as String? ?? 'Project';
+      NotificationService.sendProjectCompletedNotification(
+        projectId: widget.projectId,
+        projectName: projectName,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1451,56 +1512,69 @@ Looking forward to working with you!
         title: Text(widget.projectData['project_name'] ?? 'Project'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
+          // Share invite button (primary action)
           IconButton(
-            icon: const Icon(Icons.photo_library),
-            tooltip: 'Gallery View',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => EnhancedPhotoTimeline(
-                    projectId: widget.projectId,
-                    projectData: widget.projectData,
-                  ),
-                ),
-              );
-            },
+            icon: const Icon(Icons.share),
+            tooltip: 'Share Project Link',
+            onPressed: () => _shareProjectInvite(context),
           ),
-          IconButton(
-            icon: const Icon(Icons.chat_bubble_outline),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProjectChatScreen(
-                    projectId: widget.projectId,
-                    projectName: widget.projectData['project_name'] ?? 'Project',
-                    isContractor: true,
-                  ),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.visibility),
-            tooltip: 'Client View',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ClientProjectTimeline(
-                    projectId: widget.projectId,
-                    projectData: widget.projectData,
-                    isPreview: true,
-                  ),
-                ),
-              );
-            },
-          ),
+          // Overflow menu with all other actions
           PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'More Options',
             onSelected: (value) {
-              if (value == 'manage_team') {
+              if (value == 'client_view') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ClientProjectTimeline(
+                      projectId: widget.projectId,
+                      projectData: widget.projectData,
+                      isPreview: true,
+                    ),
+                  ),
+                );
+              } else if (value == 'gallery') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EnhancedPhotoTimeline(
+                      projectId: widget.projectId,
+                      projectData: widget.projectData,
+                    ),
+                  ),
+                );
+              } else if (value == 'chat') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProjectChatScreen(
+                      projectId: widget.projectId,
+                      projectName: widget.projectData['project_name'] ?? 'Project',
+                      isContractor: true,
+                    ),
+                  ),
+                );
+              } else if (value == 'client_requests') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => Scaffold(
+                      appBar: AppBar(
+                        title: const Text('Client Requests'),
+                        backgroundColor: Colors.grey[800],
+                        foregroundColor: Colors.white,
+                      ),
+                      body: ClientChangesActivityWidget(
+                        projectId: widget.projectId,
+                        userRole: 'contractor',
+                      ),
+                    ),
+                  ),
+                );
+              } else if (value == 'manage_team') {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -1565,11 +1639,59 @@ Looking forward to working with you!
                 );
               } else if (value == 'complete') {
                 _showCompleteProjectDialog();
+              } else if (value == 'debug') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DebugToolsScreen(),
+                  ),
+                );
               } else if (value == 'delete') {
                 _showDeleteProjectDialog();
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'client_view',
+                child: Row(
+                  children: [
+                    Icon(Icons.visibility),
+                    SizedBox(width: 12),
+                    Text('Preview Client View'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'gallery',
+                child: Row(
+                  children: [
+                    Icon(Icons.photo_library),
+                    SizedBox(width: 12),
+                    Text('Gallery View'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'chat',
+                child: Row(
+                  children: [
+                    Icon(Icons.chat_bubble_outline),
+                    SizedBox(width: 12),
+                    Text('Project Chat'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'client_requests',
+                child: Row(
+                  children: [
+                    Icon(Icons.list_alt),
+                    SizedBox(width: 12),
+                    Text('Client Requests'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
               const PopupMenuItem(
                 value: 'manage_team',
                 child: Row(
@@ -1620,6 +1742,7 @@ Looking forward to working with you!
                   ],
                 ),
               ),
+              const PopupMenuDivider(),
               const PopupMenuItem(
                 value: 'complete',
                 child: Row(
@@ -1627,6 +1750,16 @@ Looking forward to working with you!
                     Icon(Icons.check_circle, color: Colors.green),
                     SizedBox(width: 12),
                     Text('Mark Complete'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'debug',
+                child: Row(
+                  children: [
+                    Icon(Icons.bug_report, color: Colors.orange),
+                    SizedBox(width: 12),
+                    Text('Debug Tools'),
                   ],
                 ),
               ),
@@ -1645,186 +1778,230 @@ Looking forward to working with you!
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Project info header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.person_outline,
-                      size: 20,
-                      color: Colors.grey[600],
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      widget.projectData['client_name'] ?? 'No client',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey[700],
+      body: Container(
+        color: Colors.grey[50], // Light background matching milestone page
+        child: Column(
+          children: [
+            // Project info header - Clean card design
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Client name
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.person_outline,
+                        size: 18,
+                        color: Colors.grey[600],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.attach_money,
-                      size: 20,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    Text(
-                      '\$${widget.projectData['current_cost'] ?? widget.projectData['original_cost'] ?? 0}',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        widget.projectData['status'] == 'active' ? 'Active' : 'Completed',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.secondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.projectData['client_name'] ?? 'No client',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.grey[700],
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                // Assigned crew chips
-                Builder(
-                  builder: (context) {
-                    final assignedUids = (widget.projectData['assigned_member_uids'] as List?)?.cast<String>() ?? [];
-                    if (assignedUids.isEmpty) return const SizedBox.shrink();
-                    final teamId = widget.projectData['team_id'] as String?;
-                    if (teamId == null) return const SizedBox.shrink();
-                    return StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('teams')
-                          .doc(teamId)
-                          .collection('members')
-                          .snapshots(),
-                      builder: (context, snap) {
-                        if (!snap.hasData) return const SizedBox.shrink();
-                        final members = snap.data!.docs
-                            .where((d) {
-                              final data = d.data() as Map<String, dynamic>;
-                              final uid = data['user_uid'] as String?;
-                              return uid != null && assignedUids.contains(uid);
-                            })
-                            .map((d) => d.data() as Map<String, dynamic>)
-                            .toList();
-                        if (members.isEmpty) return const SizedBox.shrink();
-                        return GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ProjectTeamScreen(
-                                projectId: widget.projectId,
-                                projectData: widget.projectData,
+                      // Status badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: widget.projectData['status'] == 'active'
+                              ? Colors.blue.withOpacity(0.1)
+                              : Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          widget.projectData['status'] == 'active' ? 'Active' : 'Completed',
+                          style: TextStyle(
+                            color: widget.projectData['status'] == 'active'
+                                ? Colors.blue[700]
+                                : Colors.green[700],
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Project total
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.account_balance_wallet,
+                        size: 18,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Project Total:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(
+                          (widget.projectData['current_cost'] ?? widget.projectData['original_cost'] ?? 0) as num,
+                        ),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Assigned crew chips
+                  Builder(
+                    builder: (context) {
+                      final assignedUids = (widget.projectData['assigned_member_uids'] as List?)?.cast<String>() ?? [];
+                      if (assignedUids.isEmpty) return const SizedBox.shrink();
+                      final teamId = widget.projectData['team_id'] as String?;
+                      if (teamId == null) return const SizedBox.shrink();
+                      return StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('teams')
+                            .doc(teamId)
+                            .collection('members')
+                            .snapshots(),
+                        builder: (context, snap) {
+                          if (!snap.hasData) return const SizedBox.shrink();
+                          final members = snap.data!.docs
+                              .where((d) {
+                                final data = d.data() as Map<String, dynamic>;
+                                final uid = data['user_uid'] as String?;
+                                return uid != null && assignedUids.contains(uid);
+                              })
+                              .map((d) => d.data() as Map<String, dynamic>)
+                              .toList();
+                          if (members.isEmpty) return const SizedBox.shrink();
+                          return GestureDetector(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ProjectTeamScreen(
+                                  projectId: widget.projectId,
+                                  projectData: widget.projectData,
+                                ),
                               ),
                             ),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              children: [
-                                Icon(Icons.groups, size: 16, color: Colors.grey[500]),
-                                const SizedBox(width: 2),
-                                ...members.map((m) {
-                                  final role = m['role'] as String? ?? 'worker';
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: role == 'foreman'
-                                          ? Colors.blue.withOpacity(0.1)
-                                          : Colors.green.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.groups, size: 16, color: Colors.grey[500]),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Wrap(
+                                      spacing: 6,
+                                      runSpacing: 4,
+                                      children: members.map((m) {
+                                        final role = m['role'] as String? ?? 'worker';
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: role == 'foreman'
+                                                ? Colors.blue.withOpacity(0.1)
+                                                : Colors.green.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            '${m['name'] ?? 'Unknown'}',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: role == 'foreman' ? Colors.blue[700] : Colors.green[700],
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
                                     ),
-                                    child: Text(
-                                      '${m['name'] ?? 'Unknown'}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: role == 'foreman' ? Colors.blue[700] : Colors.green[700],
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          // Timeline View with Activity Tab
-          Expanded(
-            child: DefaultTabController(
-              length: 6,
-              child: Column(
-                children: [
-                  Container(
-                    color: Colors.white,
-                    child: TabBar(
-                      isScrollable: true,
-                      tabAlignment: TabAlignment.center,
-                      labelColor: Theme.of(context).colorScheme.primary,
-                      unselectedLabelColor: Colors.grey,
-                      indicatorColor: Theme.of(context).colorScheme.primary,
-                      tabs: const [
-                        Tab(text: 'Milestones'),
-                        Tab(text: 'Activity'),
-                        Tab(text: 'Expenses'),
-                        Tab(text: 'Docs'),
-                        Tab(text: 'Time'),
-                        Tab(text: 'Invoices'),
-                      ],
-                    ),
+                          );
+                        },
+                      );
+                    },
                   ),
+                ],
+              ),
+            ),
+
+            // Timeline View with Activity Tab
+            Expanded(
+              child: DefaultTabController(
+                length: 6,
+                child: Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: TabBar(
+                        isScrollable: true,
+                        tabAlignment: TabAlignment.center,
+                        labelColor: Colors.blue[700],
+                        unselectedLabelColor: Colors.grey[600],
+                        indicatorColor: Colors.blue[700],
+                        indicatorWeight: 3,
+                        labelStyle: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                        unselectedLabelStyle: const TextStyle(
+                          fontWeight: FontWeight.normal,
+                          fontSize: 14,
+                        ),
+                        tabs: const [
+                          Tab(text: 'Milestones'),
+                          Tab(text: 'Activity'),
+                          Tab(text: 'Expenses'),
+                          Tab(text: 'Docs'),
+                          Tab(text: 'Time'),
+                          Tab(text: 'Invoices'),
+                        ],
+                      ),
+                    ),
                   Expanded(
                     child: TabBarView(
                       children: [
-                        // Tab 1: Milestones
-                        ProjectTimelineWidget(
+                        // Tab 1: Milestones (Clean design)
+                        ProjectTimelineClean(
                           projectId: widget.projectId,
                           projectData: widget.projectData,
                           userRole: 'contractor',
-                          showProgressHeader: true,
                           onAddPhotoUpdate: (milestoneId, milestoneName) {
                             // Get milestone reference and trigger photo upload
                             final milestoneRef = FirebaseFirestore.instance
@@ -2003,8 +2180,10 @@ Looking forward to working with you!
               ),
             ),
           ),
-
-          // OLD: Unified Activity Timeline (commenting out for now)
+        ],
+      ),
+      ), // Close Container
+      // OLD: Unified Activity Timeline (commenting out for now)
           /*
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
@@ -2069,12 +2248,14 @@ Looking forward to working with you!
               },
             ),
           ),
-          */
         ],
       ),
+          */
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          const DebugConsoleButton(),
+          const SizedBox(height: 12),
           FloatingActionButton(
             heroTag: 'camera',
             onPressed: _takePicture,

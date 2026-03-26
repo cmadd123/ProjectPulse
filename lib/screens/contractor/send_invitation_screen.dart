@@ -78,8 +78,8 @@ class _SendInvitationScreenState extends State<SendInvitationScreen> {
     setState(() => _isSending = true);
 
     try {
-      // Update project with invitation_ready flag
-      // This triggers the Cloud Function to send the email
+      // Simple approach: Just set invitation_ready to true
+      // Cloud Function triggers when this field changes from false/undefined → true
       await FirebaseFirestore.instance
           .collection('projects')
           .doc(widget.projectId)
@@ -87,6 +87,9 @@ class _SendInvitationScreenState extends State<SendInvitationScreen> {
         'invitation_ready': true,
         'invitation_requested_at': FieldValue.serverTimestamp(),
       });
+
+      // Wait briefly to allow Cloud Function to process and write back invitation_sent
+      await Future.delayed(const Duration(seconds: 2));
 
       setState(() {
         _isSending = false;
@@ -103,38 +106,42 @@ class _SendInvitationScreenState extends State<SendInvitationScreen> {
   }
 
   Future<void> _sendContractText() async {
-    if (_milestones.isEmpty || _projectData == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Loading project data...')),
-      );
-      return;
+    // Wait for project data to load if it hasn't yet
+    if (_projectData == null) {
+      if (_isLoadingMilestones) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Loading project data...')),
+        );
+        return;
+      }
+      // If not loading but still null, something went wrong - try anyway
     }
 
     final currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
     final dateFormat = DateFormat('MMM d, yyyy');
 
-    // Build milestone list for SMS
-    final milestoneList = _milestones.map((m) {
-      return '- ${m['name']}: ${currencyFormat.format(m['amount'])} (paid when work is done)';
-    }).join('\n');
-
-    // Get dates
-    final startDate = _projectData!['start_date'] as Timestamp?;
-    final endDate = _projectData!['estimated_end_date'] as Timestamp?;
+    // Get project details (with fallbacks)
+    final startDate = _projectData?['start_date'] as Timestamp?;
+    final endDate = _projectData?['estimated_end_date'] as Timestamp?;
     final startDateStr = startDate != null ? dateFormat.format(startDate.toDate()) : 'TBD';
     final endDateStr = endDate != null ? dateFormat.format(endDate.toDate()) : 'TBD';
 
-    // Calculate total cost from project
-    final totalCost = _projectData!['current_cost'] as double? ??
-                     _projectData!['original_cost'] as double? ?? 0.0;
+    final totalCost = _projectData?['current_cost'] as double? ??
+                     _projectData?['original_cost'] as double? ?? 0.0;
 
-    // Get client phone (if exists)
-    final clientPhone = _projectData!['client_phone'] as String? ?? '';
-
+    final clientPhone = _projectData?['client_phone'] as String? ?? '';
     final inviteLink = 'https://projectpulsehub.com/join/${widget.projectId}';
 
-    // Build SMS message
-    final smsMessage = '''Hi ${widget.clientName}! Here's the plan for your ${widget.projectName}:
+    // Build SMS message (with or without milestones)
+    String smsMessage;
+
+    if (_milestones.isNotEmpty) {
+      // Include milestone details if available
+      final milestoneList = _milestones.map((m) {
+        return '- ${m['name']}: ${currencyFormat.format(m['amount'])} (paid when work is done)';
+      }).join('\n');
+
+      smsMessage = '''Hi ${widget.clientName}! Here's the plan for your ${widget.projectName}:
 
 $milestoneList
 
@@ -146,6 +153,17 @@ You'll see photo updates after each phase. Payment due within 3 days of completi
 Track progress: $inviteLink
 
 Reply YES to accept and I'll order materials!''';
+    } else {
+      // Simpler message without milestones
+      smsMessage = '''Hi ${widget.clientName}! I've set up your project: ${widget.projectName}
+
+${totalCost > 0 ? 'Total: ${currencyFormat.format(totalCost)}\n' : ''}Timeline: $startDateStr to $endDateStr
+
+Track real-time progress with photos and updates:
+$inviteLink
+
+Looking forward to working with you!''';
+    }
 
     try {
       // Construct SMS URI
@@ -594,30 +612,69 @@ Reply YES to accept and I'll order materials!''';
                 ],
               ),
 
-            // Post-send state: show share options
+            // Post-send state: show share options with real-time status
             if (_invitationSent) ...[
               const SizedBox(height: 16),
-              Card(
-                color: Colors.green[50],
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Row(
+              StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('projects')
+                    .doc(widget.projectId)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  // Default state while waiting
+                  String statusText = 'Sending invitation email...';
+                  Color cardColor = Colors.blue[50]!;
+                  Color iconColor = Colors.blue[700]!;
+                  Color textColor = Colors.blue[900]!;
+                  IconData statusIcon = Icons.email;
+
+                  if (snapshot.hasData && snapshot.data!.exists) {
+                    final data = snapshot.data!.data() as Map<String, dynamic>?;
+                    final invitationSent = data?['invitation_sent'] as Map<String, dynamic>?;
+
+                    if (invitationSent != null) {
+                      final emailResult = invitationSent['email'] as Map<String, dynamic>?;
+
+                      if (emailResult != null) {
+                        if (emailResult['success'] == true) {
+                          statusText = 'Invitation email sent to ${widget.clientEmail}!';
+                          cardColor = Colors.green[50]!;
+                          iconColor = Colors.green[700]!;
+                          textColor = Colors.green[800]!;
+                          statusIcon = Icons.check_circle;
+                        } else {
+                          final error = emailResult['error'] as String? ?? 'Unknown error';
+                          statusText = 'Failed to send email: $error';
+                          cardColor = Colors.red[50]!;
+                          iconColor = Colors.red[700]!;
+                          textColor = Colors.red[800]!;
+                          statusIcon = Icons.error;
+                        }
+                      }
+                    }
+                  }
+
+                  return Card(
+                    color: cardColor,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
                         children: [
-                          Icon(Icons.check_circle, color: Colors.green[700]),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Invitation email queued for ${widget.clientEmail}',
-                              style: TextStyle(
-                                color: Colors.green[800],
-                                fontWeight: FontWeight.w500,
+                          Row(
+                            children: [
+                              Icon(statusIcon, color: iconColor),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  statusText,
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
-                      ),
                       const SizedBox(height: 12),
                       Text(
                         'You can also share the link directly:',
@@ -648,9 +705,11 @@ Reply YES to accept and I'll order materials!''';
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 16),
               SizedBox(

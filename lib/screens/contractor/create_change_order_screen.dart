@@ -21,6 +21,8 @@ class _CreateChangeOrderScreenState extends State<CreateChangeOrderScreen> {
   final _costController = TextEditingController();
   bool _isLoading = false;
   bool _isAddition = true; // true for addition, false for reduction
+  String? _selectedMilestoneId;
+  String? _selectedMilestoneName;
 
   @override
   void dispose() {
@@ -38,6 +40,16 @@ class _CreateChangeOrderScreenState extends State<CreateChangeOrderScreen> {
       final costValue = double.parse(_costController.text.trim());
       final costChange = _isAddition ? costValue : -costValue;
 
+      // Create milestone reference if selected
+      DocumentReference? milestoneRef;
+      if (_selectedMilestoneId != null) {
+        milestoneRef = FirebaseFirestore.instance
+            .collection('projects')
+            .doc(widget.projectId)
+            .collection('milestones')
+            .doc(_selectedMilestoneId);
+      }
+
       await FirebaseFirestore.instance
           .collection('projects')
           .doc(widget.projectId)
@@ -46,6 +58,8 @@ class _CreateChangeOrderScreenState extends State<CreateChangeOrderScreen> {
         'description': _descriptionController.text.trim(),
         'cost_change': costChange,
         'status': 'pending',
+        'milestone_ref': milestoneRef,
+        'milestone_name': _selectedMilestoneName,
         'requested_at': FieldValue.serverTimestamp(),
         'responded_at': null,
         'responded_by_ref': null,
@@ -68,7 +82,11 @@ class _CreateChangeOrderScreenState extends State<CreateChangeOrderScreen> {
       if (mounted) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Change order created')),
+          const SnackBar(
+            content: Text('✓ Change order submitted! Client notified.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
         );
       }
     } catch (e) {
@@ -117,6 +135,67 @@ class _CreateChangeOrderScreenState extends State<CreateChangeOrderScreen> {
                     return 'Please describe the change';
                   }
                   return null;
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // Milestone selector
+              Text(
+                'Related Milestone (Optional)',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 12),
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('projects')
+                    .doc(widget.projectId)
+                    .collection('milestones')
+                    .orderBy('order')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final milestones = snapshot.data!.docs;
+
+                  return DropdownButtonFormField<String>(
+                    value: _selectedMilestoneId,
+                    decoration: InputDecoration(
+                      hintText: 'Select milestone (optional)',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: null,
+                        child: Text('None (General Project Cost)'),
+                      ),
+                      ...milestones.map((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        return DropdownMenuItem<String>(
+                          value: doc.id,
+                          child: Text(data['name'] ?? 'Milestone'),
+                        );
+                      }).toList(),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedMilestoneId = value;
+                        if (value != null) {
+                          final milestone = milestones.firstWhere((doc) => doc.id == value);
+                          _selectedMilestoneName = (milestone.data() as Map<String, dynamic>)['name'] as String?;
+                        } else {
+                          _selectedMilestoneName = null;
+                        }
+                      });
+                    },
+                  );
                 },
               ),
               const SizedBox(height: 24),
@@ -210,12 +289,13 @@ class _CreateChangeOrderScreenState extends State<CreateChangeOrderScreen> {
               // Create button
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 56,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _createChangeOrder,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),

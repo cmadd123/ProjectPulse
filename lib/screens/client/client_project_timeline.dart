@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/connectivity_service.dart';
+import '../../services/notification_service.dart';
 import 'leave_review_screen.dart';
-import 'enhanced_photo_timeline.dart';
 import '../shared/project_chat_screen.dart';
 import '../../components/project_timeline_widget.dart';
 import '../../components/contractor_info_card.dart';
@@ -15,6 +16,8 @@ import '../../components/time_tab_widget.dart';
 import '../../components/client_welcome_sheet.dart';
 import '../../components/notification_permission_sheet.dart';
 import '../../components/skeleton_loader.dart';
+import '../../components/client_changes_activity_widget.dart';
+import '../../components/debug_console.dart';
 
 class ClientProjectTimeline extends StatefulWidget {
   final String projectId;
@@ -146,6 +149,18 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
       final user = FirebaseAuth.instance.currentUser!;
       final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
 
+      // Get change order data before updating
+      final changeOrderDoc = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId)
+          .collection('change_orders')
+          .doc(changeOrderId)
+          .get();
+
+      final changeOrderData = changeOrderDoc.data() ?? {};
+      final description = changeOrderData['description'] as String? ?? 'Change order';
+      final costChange = (changeOrderData['cost_change'] as num?)?.toDouble() ?? 0;
+
       // Update change order status
       await FirebaseFirestore.instance
           .collection('projects')
@@ -160,26 +175,35 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
 
       // If approved, update project's current_cost
       if (approve) {
-        final changeOrderDoc = await FirebaseFirestore.instance
-            .collection('projects')
-            .doc(widget.projectId)
-            .collection('change_orders')
-            .doc(changeOrderId)
-            .get();
-
-        final costChange = changeOrderDoc.data()?['cost_change'] as num? ?? 0;
-
         await FirebaseFirestore.instance.collection('projects').doc(widget.projectId).update({
-          'current_cost': FieldValue.increment(costChange.toDouble()),
+          'current_cost': FieldValue.increment(costChange),
         });
       }
 
+      // Notify contractor of client's response
+      NotificationService.sendChangeOrderResponseNotification(
+        projectId: widget.projectId,
+        projectName: widget.projectData['project_name'] as String? ?? 'Project',
+        changeOrderDescription: description,
+        approved: approve,
+        costChange: costChange,
+      );
+
       if (context.mounted) {
-        ConnectivityService.showOfflineWriteFeedback(context);
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(approve ? 'Change order approved' : 'Change order declined'),
+            content: Text(approve ? '✓ Change order approved! Contractor notified.' : '✓ Change order declined! Contractor notified.'),
             backgroundColor: approve ? Colors.green : Colors.red,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'View',
+              textColor: Colors.white,
+              onPressed: () {
+                // Navigate to Activity tab
+                DefaultTabController.of(context).animateTo(1);
+              },
+            ),
           ),
         );
       }
@@ -615,6 +639,11 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
 
   @override
   Widget build(BuildContext context) {
+    // DEBUG: Log build method entry
+    DebugConsole().log('🔍 CLIENT TIMELINE BUILD - isPreview: ${widget.isPreview}, projectId: ${widget.projectId}');
+    DebugConsole().log('🔍 CLIENT TIMELINE - AppBar will show ${widget.isPreview ? "0" : "5"} action buttons');
+    DebugConsole().log('🔍 CLIENT TIMELINE - Building Scaffold with AppBar...');
+
     final dateFormat = DateFormat('MMM d, yyyy');
     final startDate = (widget.projectData['start_date'] as Timestamp?)?.toDate();
     final estimatedEndDate = (widget.projectData['estimated_end_date'] as Timestamp?)?.toDate();
@@ -629,6 +658,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
       if (daysElapsed > totalDays) daysElapsed = totalDays;
     }
 
+    DebugConsole().log('✅ CLIENT TIMELINE - Returning Scaffold widget now');
     return Scaffold(
       extendBody: false,
       appBar: AppBar(
@@ -637,19 +667,39 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
         foregroundColor: Colors.white,
         actions: [
           if (!widget.isPreview)
-            IconButton(
-              icon: const Icon(Icons.photo_library),
-              tooltip: 'Gallery View',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => EnhancedPhotoTimeline(
-                      projectId: widget.projectId,
-                      projectData: widget.projectData,
-                    ),
-                  ),
+            Builder(
+              builder: (context) {
+                DebugConsole().log('✅ CLIENT TIMELINE - Rendering "My Requests" button (Icons.list_alt)');
+                return IconButton(
+                  icon: const Icon(Icons.list_alt),
+                  tooltip: 'My Requests',
+                  onPressed: () {
+                    DebugConsole().log('🔍 CLIENT TIMELINE - "My Requests" button TAPPED');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => Scaffold(
+                          appBar: AppBar(
+                            title: const Text('My Requests'),
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            foregroundColor: Colors.white,
+                          ),
+                          body: ClientChangesActivityWidget(
+                            projectId: widget.projectId,
+                            userRole: 'client',
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 );
+              },
+            )
+          else
+            Builder(
+              builder: (context) {
+                DebugConsole().log('❌ CLIENT TIMELINE - "My Requests" button HIDDEN (isPreview=true)');
+                return const SizedBox.shrink();
               },
             ),
           if (!widget.isPreview)
@@ -665,6 +715,32 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                       isContractor: false,
                     ),
                   ),
+                );
+              },
+            ),
+          if (!widget.isPreview)
+            IconButton(
+              icon: const Icon(Icons.share),
+              tooltip: 'Share Project Link',
+              onPressed: () {
+                final projectName = widget.projectData['project_name'] ?? 'Project';
+                final inviteLink = 'https://projectpulsehub.com/join/${widget.projectId}';
+                Share.share(
+                  'Check out my project "$projectName" on ProjectPulse: $inviteLink',
+                  subject: projectName,
+                );
+              },
+            ),
+          if (!widget.isPreview)
+            IconButton(
+              icon: const Icon(Icons.bug_report, color: Colors.purple),
+              tooltip: 'Debug Console',
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.black87,
+                  builder: (context) => const DebugConsoleScreen(),
                 );
               },
             ),
@@ -941,101 +1017,6 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
             ),
           ), */
 
-          // Photo Gallery Button - Primary CTA for clients
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('projects')
-                .doc(widget.projectId)
-                .collection('updates')
-                .snapshots(),
-            builder: (context, snapshot) {
-              final photoCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
-
-              return Container(
-                margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Material(
-                  borderRadius: BorderRadius.circular(16),
-                  elevation: 3,
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EnhancedPhotoTimeline(
-                            projectId: widget.projectId,
-                            projectData: widget.projectData,
-                          ),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Theme.of(context).colorScheme.primary,
-                            Theme.of(context).colorScheme.secondary,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.photo_library,
-                              color: Colors.white,
-                              size: 32,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'View Photo Timeline',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  photoCount > 0
-                                      ? '$photoCount photo${photoCount == 1 ? '' : 's'} • Latest updates from your project'
-                                      : 'Your contractor will post progress photos here',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.9),
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(
-                            Icons.arrow_forward_ios,
-                            color: Colors.white.withOpacity(0.8),
-                            size: 20,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-
           // Combined Timeline: Milestones + Activity
           Expanded(
             child: DefaultTabController(
@@ -1118,6 +1099,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
                           projectData: widget.projectData,
                           userRole: 'client',
                           showProgressHeader: true, // Changed to true so it scrolls with content
+                          isPreview: widget.isPreview, // Pass preview mode to disable actions
                         ),
                         // Tab 2: Activity (photos, change orders) - Simpler approach without combined streams
                         StreamBuilder<QuerySnapshot>(

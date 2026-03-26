@@ -64,7 +64,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           .collection('teams')
           .doc(teamId)
           .collection('members')
-          .where('status', isEqualTo: 'active')
+          .where('status', whereIn: ['active', 'invited'])
           .get();
 
       final subsSnap = await FirebaseFirestore.instance
@@ -134,13 +134,36 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
 
     final dateLabel = '${normalizedDate.month}/${normalizedDate.day}';
-    NotificationService.sendScheduleNotification(
-      userUid: memberUid,
-      projectName: projectName,
-      dateLabel: dateLabel,
-    );
 
-    if (mounted) Navigator.pop(context);
+    // Show local confirmation snackbar (context-aware message)
+    final currentUserUid = FirebaseAuth.instance.currentUser!.uid;
+    final isSchedulingSelf = (memberUid == currentUserUid);
+
+    // Only send push notification if scheduling someone else (not yourself)
+    if (!isSchedulingSelf) {
+      NotificationService.sendScheduleNotification(
+        userUid: memberUid,
+        projectName: projectName,
+        dateLabel: dateLabel,
+      );
+    }
+    final message = isSchedulingSelf
+        ? 'You\'re scheduled for $projectName on $dateLabel'
+        : '$memberName scheduled for $projectName on $dateLabel';
+
+    debugPrint('Schedule: memberUid=$memberUid, currentUid=$currentUserUid, isSelf=$isSchedulingSelf');
+
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 2),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _clearAssignments(
@@ -178,7 +201,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
         padding: const EdgeInsets.all(24),
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -194,47 +221,56 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             Text(DateFormat('EEEE, MMM d').format(date),
                 style: TextStyle(fontSize: 14, color: Colors.grey[600])),
             const SizedBox(height: 16),
-            if (_projects.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text('No active projects',
-                      style: TextStyle(color: Colors.grey[500])),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_projects.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
+                          child: Text('No active projects',
+                              style: TextStyle(color: Colors.grey[500])),
+                        ),
+                      )
+                    else
+                      ..._projects.map((project) {
+                        final color = _projectColor(project['id'] as String);
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: color.withOpacity(0.15),
+                            child: Icon(Icons.work, color: color, size: 20),
+                          ),
+                          title: Text(project['name'] as String),
+                          onTap: () => _assignProject(
+                            memberUid,
+                            memberName,
+                            project['id'] as String,
+                            project['name'] as String,
+                            date,
+                          ),
+                        );
+                      }),
+                    if (existingEntries.isNotEmpty) ...[
+                      const Divider(),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.red.withOpacity(0.1),
+                          child: const Icon(Icons.clear, color: Colors.red, size: 20),
+                        ),
+                        title: const Text('Clear assignments',
+                            style: TextStyle(color: Colors.red)),
+                        onTap: () =>
+                            _clearAssignments(memberUid, date, allEntries),
+                      ),
+                    ],
+                  ],
                 ),
-              )
-            else
-              ..._projects.map((project) {
-                final color = _projectColor(project['id'] as String);
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: color.withOpacity(0.15),
-                    child: Icon(Icons.work, color: color, size: 20),
-                  ),
-                  title: Text(project['name'] as String),
-                  onTap: () => _assignProject(
-                    memberUid,
-                    memberName,
-                    project['id'] as String,
-                    project['name'] as String,
-                    date,
-                  ),
-                );
-              }),
-            if (existingEntries.isNotEmpty) ...[
-              const Divider(),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
-                  backgroundColor: Colors.red.withOpacity(0.1),
-                  child: const Icon(Icons.clear, color: Colors.red, size: 20),
-                ),
-                title: const Text('Clear assignments',
-                    style: TextStyle(color: Colors.red)),
-                onTap: () =>
-                    _clearAssignments(memberUid, date, allEntries),
               ),
-            ],
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -265,7 +301,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       'created_at': Timestamp.now(),
     });
 
-    if (mounted) Navigator.pop(context);
+    // Show local confirmation snackbar
+    final dateLabel = DateFormat('EEEE, MMM d').format(date);
+    final message = '$subName scheduled for $projectName on $dateLabel';
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 2),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _clearSubAssignments(
@@ -305,7 +354,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
         padding: const EdgeInsets.all(24),
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -321,46 +374,55 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             Text(DateFormat('EEEE, MMM d').format(date),
                 style: TextStyle(fontSize: 14, color: Colors.grey[600])),
             const SizedBox(height: 16),
-            if (_projects.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text('No active projects',
-                      style: TextStyle(color: Colors.grey[500])),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_projects.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
+                          child: Text('No active projects',
+                              style: TextStyle(color: Colors.grey[500])),
+                        ),
+                      )
+                    else
+                      ..._projects.map((project) {
+                        final color = _projectColor(project['id'] as String);
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: color.withOpacity(0.15),
+                            child: Icon(Icons.work, color: color, size: 20),
+                          ),
+                          title: Text(project['name'] as String),
+                          onTap: () => _assignSubProject(
+                            subId,
+                            subName,
+                            project['id'] as String,
+                            project['name'] as String,
+                            date,
+                          ),
+                        );
+                      }),
+                    if (existingEntries.isNotEmpty) ...[
+                      const Divider(),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.red.withOpacity(0.1),
+                          child: const Icon(Icons.clear, color: Colors.red, size: 20),
+                        ),
+                        title: const Text('Clear assignments',
+                            style: TextStyle(color: Colors.red)),
+                        onTap: () => _clearSubAssignments(subId, date, allEntries),
+                      ),
+                    ],
+                  ],
                 ),
-              )
-            else
-              ..._projects.map((project) {
-                final color = _projectColor(project['id'] as String);
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: color.withOpacity(0.15),
-                    child: Icon(Icons.work, color: color, size: 20),
-                  ),
-                  title: Text(project['name'] as String),
-                  onTap: () => _assignSubProject(
-                    subId,
-                    subName,
-                    project['id'] as String,
-                    project['name'] as String,
-                    date,
-                  ),
-                );
-              }),
-            if (existingEntries.isNotEmpty) ...[
-              const Divider(),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
-                  backgroundColor: Colors.red.withOpacity(0.1),
-                  child: const Icon(Icons.clear, color: Colors.red, size: 20),
-                ),
-                title: const Text('Clear assignments',
-                    style: TextStyle(color: Colors.red)),
-                onTap: () => _clearSubAssignments(subId, date, allEntries),
               ),
-            ],
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -532,24 +594,46 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     data['project_id'] as String? ?? '';
                 final color = _projectColor(projectId);
 
-                return Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 2),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 3, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    projectName,
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      color: color,
+                // Create abbreviation: first letter of each word, max 3 letters
+                final words = projectName.split(' ');
+                String abbreviation;
+                if (words.length >= 2) {
+                  // Multi-word: take first letter of each word (max 3)
+                  abbreviation = words
+                      .take(3)
+                      .map((w) => w.isNotEmpty ? w[0].toUpperCase() : '')
+                      .join('');
+                } else if (projectName.length <= 6) {
+                  // Short name: show full name
+                  abbreviation = projectName;
+                } else {
+                  // Long single word: first 4-5 chars
+                  abbreviation = projectName.substring(0, projectName.length >= 5 ? 5 : 4).toUpperCase();
+                }
+
+                return Tooltip(
+                  message: projectName,
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 2),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    child: Text(
+                      abbreviation,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                        letterSpacing: 0.5,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                    ),
                   ),
                 );
               }).toList(),

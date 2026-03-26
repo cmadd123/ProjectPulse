@@ -278,7 +278,28 @@ class _AllProjectsScreenState extends State<AllProjectsScreen> {
                       final pendingCOs =
                           coSnapshot.data?.docs.length ?? 0;
 
-                      return Card(
+                      return StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('projects')
+                            .doc(doc.id)
+                            .collection('client_changes')
+                            .where('status', isEqualTo: 'pending')
+                            .snapshots(),
+                        builder: (context, clientChangesSnapshot) {
+                          final pendingClientChanges =
+                              clientChangesSnapshot.data?.docs.length ?? 0;
+
+                          return StreamBuilder<QuerySnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('projects')
+                                .doc(doc.id)
+                                .collection('updates')
+                                .snapshots(),
+                            builder: (context, photosSnapshot) {
+                              final photoCount =
+                                  photosSnapshot.data?.docs.length ?? 0;
+
+                              return Card(
                         margin: const EdgeInsets.only(bottom: 16),
                         elevation: 3,
                         shape: RoundedRectangleBorder(
@@ -404,30 +425,48 @@ class _AllProjectsScreenState extends State<AllProjectsScreen> {
                                     ),
                                     if (totalCount > 0) ...[
                                       const SizedBox(height: 12),
+                                      // Segmented progress bar showing each milestone's status
                                       ClipRRect(
-                                        borderRadius:
-                                            BorderRadius.circular(8),
-                                        child:
-                                            LinearProgressIndicator(
-                                          value: progress,
-                                          minHeight: 6,
-                                          backgroundColor: Colors
-                                              .white
-                                              .withOpacity(0.3),
-                                          valueColor:
-                                              const AlwaysStoppedAnimation<
-                                                      Color>(
-                                                  Colors.white),
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Row(
+                                          children: [
+                                            for (var milestone in milestones)
+                                              Expanded(
+                                                child: Container(
+                                                  height: 6,
+                                                  color: () {
+                                                    final status = (milestone.data() as Map)['status'];
+                                                    if (status == 'approved') return Colors.white;
+                                                    if (status == 'awaiting_approval') return Colors.white.withOpacity(0.7);
+                                                    if (status == 'in_progress') return Colors.white.withOpacity(0.5);
+                                                    return Colors.white.withOpacity(0.3);
+                                                  }(),
+                                                ),
+                                              ),
+                                          ],
                                         ),
                                       ),
                                       const SizedBox(height: 6),
-                                      Text(
-                                        '$completedCount of $totalCount milestones complete',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.white
-                                              .withOpacity(0.9),
-                                        ),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            '$completedCount of $totalCount milestones complete',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.white.withOpacity(0.9),
+                                            ),
+                                          ),
+                                          if (awaitingCount > 0)
+                                            Text(
+                                              '$awaitingCount awaiting approval',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.white.withOpacity(0.7),
+                                                fontStyle: FontStyle.italic,
+                                              ),
+                                            ),
+                                        ],
                                       ),
                                     ],
                                   ],
@@ -465,6 +504,33 @@ class _AllProjectsScreenState extends State<AllProjectsScreen> {
                                         ),
                                       ),
                                     ),
+                                    if (photoCount > 0) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.photo_camera,
+                                                size: 12, color: Colors.purple[700]),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '$photoCount',
+                                              style: TextStyle(
+                                                color: Colors.purple[700],
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                     if (awaitingCount > 0) ...[
                                       const SizedBox(width: 8),
                                       Container(
@@ -540,6 +606,44 @@ class _AllProjectsScreenState extends State<AllProjectsScreen> {
                                         ),
                                       ),
                                     ],
+                                    if (pendingClientChanges > 0) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets
+                                            .symmetric(
+                                            horizontal: 10,
+                                            vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red
+                                              .withOpacity(0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(
+                                                  12),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize:
+                                              MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                                Icons.report_problem,
+                                                size: 12,
+                                                color:
+                                                    Colors.red[700]),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '$pendingClientChanges client req',
+                                              style: TextStyle(
+                                                color:
+                                                    Colors.red[700],
+                                                fontSize: 12,
+                                                fontWeight:
+                                                    FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                     const Spacer(),
                                     if (updatedAt != null)
                                       Text(
@@ -562,6 +666,10 @@ class _AllProjectsScreenState extends State<AllProjectsScreen> {
                             ],
                           ),
                         ),
+                      );
+                            },
+                          );
+                        },
                       );
                     },
                   );

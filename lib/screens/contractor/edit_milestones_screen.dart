@@ -42,11 +42,14 @@ class _EditMilestonesScreenState extends State<EditMilestonesScreen> {
       setState(() {
         milestones = snapshot.docs.map((doc) {
           final milestone = MilestoneRecord.fromFirestore(doc);
+          // Ensure percentage is at least 5% (Slider min value)
+          // Milestones created via manage_milestones may have 0% by default
+          final validPercentage = milestone.percentage < 5 ? 5.0 : milestone.percentage;
           return _MilestoneItem(
             milestoneId: milestone.milestoneId,
             nameController: TextEditingController(text: milestone.name),
             descriptionController: TextEditingController(text: milestone.description),
-            percentage: milestone.percentage,
+            percentage: validPercentage,
             order: milestone.order,
             status: milestone.status,
             isLocked: _isLocked(milestone.status),

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'create_milestones_screen.dart';
+import 'send_invitation_screen.dart';
 
 class CreateProjectScreen extends StatefulWidget {
   const CreateProjectScreen({super.key});
@@ -213,78 +214,18 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
 
       if (!mounted) return;
 
-      // Show invitation as bottom sheet
-      final invitationSent = await showModalBottomSheet<bool>(
-        context: context,
-        isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      // Navigate to SendInvitationScreen to show email preview
+      final invitationSent = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SendInvitationScreen(
+            projectId: projectDoc.id,
+            projectName: _projectNameController.text.trim(),
+            clientName: _clientNameController.text.trim(),
+            clientEmail: _clientEmailController.text.trim(),
+            contractorName: contractorBusinessName,
+          ),
         ),
-        builder: (ctx) {
-          final inviteLink = 'https://projectpulsehub.com/join/${projectDoc.id}';
-          final clientName = _clientNameController.text.trim();
-          final clientEmail = _clientEmailController.text.trim();
-          return Padding(
-            padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.mail_outline, size: 40, color: Color(0xFF2D3748)),
-                const SizedBox(height: 12),
-                Text('Invite $clientName?', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(clientEmail, style: TextStyle(color: Colors.grey[600])),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      await FirebaseFirestore.instance
-                          .collection('projects')
-                          .doc(projectDoc.id)
-                          .update({
-                        'invitation_ready': true,
-                        'invitation_requested_at': FieldValue.serverTimestamp(),
-                      });
-                      if (ctx.mounted) Navigator.pop(ctx, true);
-                    },
-                    icon: const Icon(Icons.email),
-                    label: const Text('Send Email'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: inviteLink));
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            const SnackBar(content: Text('Link copied!')),
-                          );
-                        },
-                        icon: const Icon(Icons.copy, size: 16),
-                        label: const Text('Copy Link'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Later'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
       ) ?? false;
 
       // Go back to contractor home

@@ -10,13 +10,20 @@ import '../../services/connectivity_service.dart';
 import '../../services/notification_service.dart';
 import '../../backend/schema/milestone_record.dart';
 import '../../components/project_timeline_widget.dart';
+import '../../components/project_timeline_design3.dart'; // Design 3 version
+import '../../components/project_timeline_clean.dart'; // Clean version
 import '../../components/contractor_info_card.dart';
 import '../../components/documents_tab_widget.dart';
+import '../../components/client_changes_activity_widget.dart';
+import '../../components/debug_console.dart';
 import 'enhanced_photo_timeline.dart';
 import 'leave_review_screen.dart';
 import '../shared/project_chat_screen.dart';
+import '../shared/project_chat_design3.dart'; // Design 3 version
 import '../shared/notification_center_screen.dart';
 import '../../components/skeleton_loader.dart';
+import 'design_preview_menu.dart';
+import 'home_tab_design3.dart';
 
 class ClientDashboardScreen extends StatefulWidget {
   const ClientDashboardScreen({super.key});
@@ -57,6 +64,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     _coSub?.cancel();
     _chatSub?.cancel();
     _brandingSub?.cancel();
+
+    DebugConsole().log('✅ CLIENT DASHBOARD - Selected project: ${projectData['project_name'] ?? projectId}');
 
     setState(() {
       _selectedProjectId = projectId;
@@ -200,6 +209,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
+    DebugConsole().log('🔍 CLIENT DASHBOARD BUILD - selectedProject: ${_selectedProjectId ?? "null"}');
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -261,39 +271,94 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
             backgroundColor: _brandColor,
             foregroundColor: _textOnBrand(),
             actions: [
-              // Notification bell
-              StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('notifications')
-                    .where('recipient_uid', isEqualTo: user.uid)
-                    .where('read', isEqualTo: false)
-                    .snapshots(),
-                builder: (context, notifSnap) {
-                  final count = notifSnap.data?.docs.length ?? 0;
-                  return IconButton(
-                    icon: Badge(
-                      isLabelVisible: count > 0,
-                      label: Text('$count', style: const TextStyle(fontSize: 10)),
-                      child: const Icon(Icons.notifications_outlined),
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationCenterScreen(),
-                        ),
-                      );
-                    },
+              // // My Requests button - REMOVED (redundant with "Needs Your Attention" section)
+              // IconButton(
+              //   icon: const Icon(Icons.list_alt),
+              //   tooltip: 'My Requests',
+              //   onPressed: () {
+              //     DebugConsole().log('🔍 CLIENT DASHBOARD - "My Requests" button TAPPED');
+              //     if (_selectedProjectId == null) {
+              //       DebugConsole().log('❌ CLIENT DASHBOARD - No project selected');
+              //       return;
+              //     }
+              //     Navigator.push(
+              //       context,
+              //       MaterialPageRoute(
+              //         builder: (context) => Scaffold(
+              //           appBar: AppBar(
+              //             title: const Text('My Requests'),
+              //             backgroundColor: _brandColor,
+              //             foregroundColor: _textOnBrand(),
+              //           ),
+              //           body: ClientChangesActivityWidget(
+              //             projectId: _selectedProjectId!,
+              //             userRole: 'client',
+              //           ),
+              //         ),
+              //       ),
+              //     );
+              //   },
+              // ),
+              // Design preview button (DEBUG)
+              IconButton(
+                icon: const Icon(Icons.palette_outlined),
+                tooltip: 'Preview Designs',
+                color: Colors.amber.withOpacity(0.9),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const DesignPreviewMenu()),
                   );
                 },
               ),
+              // // Debug console button - REMOVED for production
+              // IconButton(
+              //   icon: const Icon(Icons.bug_report),
+              //   tooltip: 'Debug Console',
+              //   color: Colors.purple.withOpacity(0.8),
+              //   onPressed: () {
+              //     DebugConsole().log('🔍 CLIENT DASHBOARD - Debug console opened');
+              //     showModalBottomSheet(
+              //       context: context,
+              //       isScrollControlled: true,
+              //       backgroundColor: Colors.black87,
+              //       builder: (context) => const DebugConsoleScreen(),
+              //     );
+              //   },
+              // ),
+              // // Notification bell - REMOVED (redundant with "Needs Your Attention" section in Design 3)
+              // StreamBuilder<QuerySnapshot>(
+              //   stream: FirebaseFirestore.instance
+              //       .collection('notifications')
+              //       .where('recipient_uid', isEqualTo: user.uid)
+              //       .where('read', isEqualTo: false)
+              //       .snapshots(),
+              //   builder: (context, notifSnap) {
+              //     final count = notifSnap.data?.docs.length ?? 0;
+              //     return IconButton(
+              //       icon: Badge(
+              //         isLabelVisible: count > 0,
+              //         label: Text('$count', style: const TextStyle(fontSize: 10)),
+              //         child: const Icon(Icons.notifications_outlined),
+              //       ),
+              //       onPressed: () {
+              //         Navigator.push(
+              //           context,
+              //           MaterialPageRoute(
+              //             builder: (_) => const NotificationCenterScreen(),
+              //           ),
+              //         );
+              //       },
+              //     );
+              //   },
+              // ),
             ],
           ),
           body: IndexedStack(
             index: _currentTabIndex,
             children: [
-              // Tab 0: Home
-              _HomeTab(
+              // Tab 0: Home (Design 3 - Personality Injection)
+              HomeTabDesign3(
                 projectId: _selectedProjectId!,
                 projectData: _selectedProjectData!,
                 brandColor: _brandColor,
@@ -305,19 +370,18 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                 projectData: _selectedProjectData!,
                 showAppBar: false,
               ),
-              // Tab 2: Chat
-              ProjectChatScreen(
+              // Tab 2: Chat (Design 3 - Personality Injection)
+              ProjectChatDesign3(
                 projectId: _selectedProjectId!,
                 projectName: projectName,
                 isContractor: false,
                 embedded: true,
               ),
-              // Tab 3: Milestones
-              ProjectTimelineWidget(
+              // Tab 3: Milestones (Clean design)
+              ProjectTimelineClean(
                 projectId: _selectedProjectId!,
                 projectData: _selectedProjectData!,
                 userRole: 'client',
-                showProgressHeader: true,
               ),
               // Tab 4: More
               _MoreTab(
@@ -550,6 +614,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       ],
     );
   }
+
 }
 
 // ─────────────────────────────────────────────────────────
@@ -625,29 +690,43 @@ class _HomeTab extends StatelessWidget {
   }
 
   Future<void> _approveMilestone(BuildContext context, String milestoneId, String milestoneName) async {
+    debugPrint('🔍 Dashboard _approveMilestone: Starting approval for $milestoneName');
+
     try {
+      // Update milestone status to approved
+      debugPrint('🔍 Dashboard _approveMilestone: Updating Firestore...');
       await MilestoneRecord.updateMilestone(projectId, milestoneId, {
         'status': 'approved',
         'approved_at': FieldValue.serverTimestamp(),
       });
+      debugPrint('🔍 Dashboard _approveMilestone: Firestore updated successfully');
 
+      // Show success SnackBar IMMEDIATELY after Firestore update
+      if (context.mounted) {
+        debugPrint('🔍 Dashboard _approveMilestone: Context is mounted, showing SnackBar');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Milestone approved! Contractor will be notified.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } else {
+        debugPrint('❌ Dashboard _approveMilestone: Context NOT mounted, cannot show SnackBar');
+      }
+
+      // Send notification to contractor (non-blocking - happens in background)
+      debugPrint('🔍 Dashboard _approveMilestone: Sending notification in background...');
       final projectName = projectData['project_name'] as String? ?? 'Project';
       NotificationService.sendMilestoneApprovedNotification(
         projectId: projectId,
         projectName: projectName,
         milestoneName: milestoneName,
-      );
-
-      if (context.mounted) {
-        ConnectivityService.showOfflineWriteFeedback(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Milestone approved!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      ).catchError((error) {
+        debugPrint('❌ Failed to send notification: $error');
+      });
     } catch (e) {
+      debugPrint('❌ Dashboard _approveMilestone: Error occurred: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
@@ -656,7 +735,7 @@ class _HomeTab extends StatelessWidget {
     }
   }
 
-  Future<void> _requestChanges(BuildContext context, String milestoneId, String milestoneName) async {
+  Future<void> _requestChanges(BuildContext context, String milestoneId, String milestoneName) async{
     final reasonController = TextEditingController();
     final result = await showDialog<String>(
       context: context,
@@ -694,21 +773,26 @@ class _HomeTab extends StatelessWidget {
         'last_change_request_at': FieldValue.serverTimestamp(),
       });
 
+      // Show success SnackBar IMMEDIATELY after Firestore update
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Changes requested - contractor will be notified'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+
+      // Send notification to contractor (non-blocking - happens in background)
       final projectName = projectData['project_name'] as String? ?? 'Project';
       NotificationService.sendChangesRequestedNotification(
         projectId: projectId,
         projectName: projectName,
         milestoneName: milestoneName,
-      );
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Changes requested'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+      ).catchError((error) {
+        debugPrint('Failed to send notification: $error');
+      });
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
