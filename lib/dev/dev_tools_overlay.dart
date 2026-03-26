@@ -271,9 +271,11 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
         ];
 
         final memberUids = <String, String>{}; // name -> generated uid
+        final allMemberUids = <String>[user.uid]; // include owner
         for (final m in members) {
           final fakeUid = 'test_${m['name']!.toLowerCase().replaceAll(' ', '_')}';
           memberUids[m['name']!] = fakeUid;
+          allMemberUids.add(fakeUid);
           await teamRef.collection('members').doc(fakeUid).set({
             'name': m['name'],
             'role': m['role'],
@@ -281,9 +283,14 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
             'phone': m['phone'],
             'user_uid': fakeUid,
             'status': 'active',
-            'joined_at': FieldValue.serverTimestamp(),
+            'added_at': FieldValue.serverTimestamp(),
           });
         }
+
+        // Update team doc with member_uids array
+        await teamRef.update({
+          'member_uids': allMemberUids,
+        });
 
         // Subcontractors
         final subs = [

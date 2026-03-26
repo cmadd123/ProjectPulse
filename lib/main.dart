@@ -1860,60 +1860,62 @@ class _ContractorProjectsScreenState
                   const SizedBox(height: 12),
 
                   // === SECTION B: Today's Crew ===
-                  if (_todaySchedule.isNotEmpty)
-                    Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.people, color: Colors.blue[700], size: 20),
-                                const SizedBox(width: 8),
-                                const Text("Today's Crew",
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                const Spacer(),
-                                Text('${_todaySchedule.length}',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue[700])),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            ..._todaySchedule.map((entry) {
-                              final name = entry['user_name'] as String? ?? 'Unknown';
-                              final project = entry['project_name'] as String? ?? '';
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 16,
-                                      backgroundColor: Colors.blue[100],
-                                      child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue[800])),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                                          Text(project, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
+                  if (_todaySchedule.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.people, color: Colors.grey[700], size: 18),
+                          const SizedBox(width: 6),
+                          Text("Today's Crew",
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                        ],
                       ),
                     ),
-                  if (_todaySchedule.isNotEmpty)
-                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 80,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _todaySchedule.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        itemBuilder: (context, index) {
+                          final entry = _todaySchedule[index];
+                          final name = entry['user_name'] as String? ?? 'Unknown';
+                          final project = entry['project_name'] as String? ?? '';
+                          final firstName = name.split(' ').first;
+                          // Color based on project for visual grouping
+                          final projHash = project.hashCode.abs();
+                          final colors = [Colors.blue, Colors.green, Colors.orange, Colors.purple, Colors.teal];
+                          final color = colors[projHash % colors.length];
+                          return SizedBox(
+                            width: 72,
+                            child: Column(
+                              children: [
+                                CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: color[100],
+                                  child: Text(
+                                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color[800]),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(firstName,
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(project.length > 10 ? '${project.substring(0, 10)}...' : project,
+                                  style: TextStyle(fontSize: 9, color: Colors.grey[500]),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
 
                   // OLD SECTION B - DISABLED
                   /* DISABLED
