@@ -311,6 +311,12 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
           'member_uids': allMemberUids,
         });
 
+        // Assign members to the Smith Kitchen Remodel project
+        final smithMembers = allMemberUids.where((uid) => uid != user.uid).toList();
+        await projectRef.update({
+          'assigned_member_uids': smithMembers,
+        });
+
         // Subcontractors
         final subs = [
           {'company_name': 'Ace Plumbing', 'trade': 'plumbing', 'contact_name': 'Tony Russo', 'phone': '555-PLM-BING'},
@@ -342,6 +348,13 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
             .where('project_name', isEqualTo: 'project deta')
             .get();
         final detaId = detaQuery.docs.isNotEmpty ? detaQuery.docs.first.id : projectRef.id;
+
+        // Assign Devon to project deta
+        if (detaQuery.docs.isNotEmpty) {
+          await detaQuery.docs.first.reference.update({
+            'assigned_member_uids': FieldValue.arrayUnion([memberUids['Devon Lee']]),
+          });
+        }
 
         for (final entry in scheduleEntries) {
           final pid = entry['project_id'] == 'existing' ? detaId : entry['project_id'];
