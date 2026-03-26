@@ -270,6 +270,25 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
           {'name': 'Devon Lee', 'role': 'worker', 'email': 'devon@example.com', 'phone': '555-777-8888'},
         ];
 
+        // Clean up old test team data first
+        final oldMembers = await teamRef.collection('members').get();
+        for (final doc in oldMembers.docs) {
+          final uid = doc.data()['user_uid'] as String? ?? '';
+          if (uid.startsWith('test_')) await doc.reference.delete();
+        }
+        final oldSubs = await teamRef.collection('subcontractors').get();
+        for (final doc in oldSubs.docs) {
+          if (['Ace Plumbing', 'Spark Electric', 'Premier Tile & Stone']
+              .contains(doc.data()['company_name'])) {
+            await doc.reference.delete();
+          }
+        }
+        final oldSchedule = await teamRef.collection('schedule_entries').get();
+        for (final doc in oldSchedule.docs) {
+          final uid = doc.data()['user_uid'] as String? ?? '';
+          if (uid.startsWith('test_')) await doc.reference.delete();
+        }
+
         final memberUids = <String, String>{}; // name -> generated uid
         final allMemberUids = <String>[user.uid]; // include owner
         for (final m in members) {
@@ -427,9 +446,35 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
       }
     }
 
+    // Also clean up test team members, subs, and schedule entries
+    final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final teamId = userDoc.data()?['team_id'] as String?;
+    if (teamId != null) {
+      final teamRef = FirebaseFirestore.instance.collection('teams').doc(teamId);
+      final members = await teamRef.collection('members').get();
+      for (final doc in members.docs) {
+        final memberUid = doc.data()['user_uid'] as String? ?? '';
+        if (memberUid.startsWith('test_')) await doc.reference.delete();
+      }
+      final subs = await teamRef.collection('subcontractors').get();
+      for (final doc in subs.docs) {
+        if (['Ace Plumbing', 'Spark Electric', 'Premier Tile & Stone']
+            .contains(doc.data()['company_name'])) {
+          await doc.reference.delete();
+        }
+      }
+      final schedule = await teamRef.collection('schedule_entries').get();
+      for (final doc in schedule.docs) {
+        final memberUid = doc.data()['user_uid'] as String? ?? '';
+        if (memberUid.startsWith('test_')) await doc.reference.delete();
+      }
+      // Reset member_uids to just owner
+      await teamRef.update({'member_uids': [uid]});
+    }
+
     if (ctx.mounted) {
       ScaffoldMessenger.of(ctx).showSnackBar(
-        SnackBar(content: Text('Deleted $deleted projects'), backgroundColor: Colors.green));
+        SnackBar(content: Text('Deleted $deleted projects + test team data'), backgroundColor: Colors.green));
     }
     setState(() => _switching = false);
   }
