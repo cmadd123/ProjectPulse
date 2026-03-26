@@ -1097,7 +1097,7 @@ class _ContractorProjectsScreenState
   @override
   void initState() {
     super.initState();
-    // TEMPORARILY DISABLED: _loadTeamId();
+    _loadTeamId();
     _aggregateTimer; // start the timer
   }
 
@@ -1860,9 +1860,63 @@ class _ContractorProjectsScreenState
                   const SizedBox(height: 12),
 
                   // === SECTION B: Today's Crew ===
-                  // TEMPORARILY DISABLED - Feature causing type errors
+                  if (_todaySchedule.isNotEmpty)
+                    Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.people, color: Colors.blue[700], size: 20),
+                                const SizedBox(width: 8),
+                                const Text("Today's Crew",
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                const Spacer(),
+                                Text('${_todaySchedule.length}',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue[700])),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ..._todaySchedule.map((entry) {
+                              final name = entry['user_name'] as String? ?? 'Unknown';
+                              final project = entry['project_name'] as String? ?? '';
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: Colors.blue[100],
+                                      child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue[800])),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                          Text(project, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (_todaySchedule.isNotEmpty)
+                    const SizedBox(height: 12),
+
+                  // OLD SECTION B - DISABLED
                   /* DISABLED
-                  // COMPREHENSIVE DEBUG CARD - Always visible
                   Card(
                     elevation: 2,
                     color: Colors.blue[50],

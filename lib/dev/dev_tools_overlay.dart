@@ -258,9 +258,83 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
         });
       }
 
+      // Add team members, subs, and today's schedule
+      if (teamId != null) {
+        final teamRef = FirebaseFirestore.instance.collection('teams').doc(teamId);
+
+        // Team members
+        final members = [
+          {'name': 'Mike Johnson', 'role': 'foreman', 'email': 'mike@example.com', 'phone': '555-111-2222'},
+          {'name': 'Carlos Rivera', 'role': 'worker', 'email': 'carlos@example.com', 'phone': '555-333-4444'},
+          {'name': 'James Wright', 'role': 'worker', 'email': 'james@example.com', 'phone': '555-555-6666'},
+          {'name': 'Devon Lee', 'role': 'worker', 'email': 'devon@example.com', 'phone': '555-777-8888'},
+        ];
+
+        final memberUids = <String, String>{}; // name -> generated uid
+        for (final m in members) {
+          final fakeUid = 'test_${m['name']!.toLowerCase().replaceAll(' ', '_')}';
+          memberUids[m['name']!] = fakeUid;
+          await teamRef.collection('members').doc(fakeUid).set({
+            'name': m['name'],
+            'role': m['role'],
+            'email': m['email'],
+            'phone': m['phone'],
+            'user_uid': fakeUid,
+            'status': 'active',
+            'joined_at': FieldValue.serverTimestamp(),
+          });
+        }
+
+        // Subcontractors
+        final subs = [
+          {'company_name': 'Ace Plumbing', 'trade': 'plumbing', 'contact_name': 'Tony Russo', 'phone': '555-PLM-BING'},
+          {'company_name': 'Spark Electric', 'trade': 'electrical', 'contact_name': 'Lisa Chen', 'phone': '555-ELE-CTRC'},
+          {'company_name': 'Premier Tile & Stone', 'trade': 'tile', 'contact_name': 'Marco Diaz', 'phone': '555-TIL-WORK'},
+        ];
+
+        for (final s in subs) {
+          await teamRef.collection('subcontractors').add({
+            ...s,
+            'status': 'active',
+            'created_at': FieldValue.serverTimestamp(),
+          });
+        }
+
+        // Today's schedule entries
+        final today = DateTime(now.year, now.month, now.day);
+        final scheduleEntries = [
+          {'user_name': 'Mike Johnson', 'user_uid': memberUids['Mike Johnson'], 'project_name': 'Smith Kitchen Remodel', 'project_id': projectRef.id},
+          {'user_name': 'Carlos Rivera', 'user_uid': memberUids['Carlos Rivera'], 'project_name': 'Smith Kitchen Remodel', 'project_id': projectRef.id},
+          {'user_name': 'James Wright', 'user_uid': memberUids['James Wright'], 'project_name': 'Smith Kitchen Remodel', 'project_id': projectRef.id},
+          {'user_name': 'Devon Lee', 'user_uid': memberUids['Devon Lee'], 'project_name': 'project deta', 'project_id': 'existing'},
+        ];
+
+        // Find project deta ID for Devon's entry
+        final detaQuery = await FirebaseFirestore.instance
+            .collection('projects')
+            .where('contractor_uid', isEqualTo: user.uid)
+            .where('project_name', isEqualTo: 'project deta')
+            .get();
+        final detaId = detaQuery.docs.isNotEmpty ? detaQuery.docs.first.id : projectRef.id;
+
+        for (final entry in scheduleEntries) {
+          final pid = entry['project_id'] == 'existing' ? detaId : entry['project_id'];
+          final pname = entry['project_id'] == 'existing' ? 'project deta' : entry['project_name'];
+          await teamRef.collection('schedule_entries').add({
+            'user_uid': entry['user_uid'],
+            'user_name': entry['user_name'],
+            'project_id': pid,
+            'project_name': pname,
+            'date': Timestamp.fromDate(today),
+            'created_by_uid': user.uid,
+            'created_at': Timestamp.now(),
+          });
+        }
+      }
+
       if (ctx.mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('Test project "Smith Kitchen Remodel" created!'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Test project created with team + schedule!'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
