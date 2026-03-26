@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../components/live_timeline_widget.dart';
 
 /// Enhanced photo timeline with Instagram Stories-style full-screen viewer
 class EnhancedPhotoTimeline extends StatefulWidget {
@@ -49,7 +50,7 @@ class _EnhancedPhotoTimelineState extends State<EnhancedPhotoTimeline> with Sing
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white70,
               tabs: const [
-                Tab(text: 'By Milestone'),
+                Tab(text: 'Timeline'),
                 Tab(text: 'All Photos'),
               ],
             ),
@@ -58,7 +59,7 @@ class _EnhancedPhotoTimelineState extends State<EnhancedPhotoTimeline> with Sing
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildMilestoneGroupedView(),
+                LiveTimelineWidget(projectId: widget.projectId, projectData: widget.projectData),
                 _buildAllPhotosView(),
               ],
             ),
@@ -78,7 +79,7 @@ class _EnhancedPhotoTimelineState extends State<EnhancedPhotoTimeline> with Sing
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           tabs: const [
-            Tab(text: 'By Milestone'),
+            Tab(text: 'Timeline'),
             Tab(text: 'All Photos'),
           ],
         ),
@@ -86,7 +87,7 @@ class _EnhancedPhotoTimelineState extends State<EnhancedPhotoTimeline> with Sing
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildMilestoneGroupedView(),
+          LiveTimelineWidget(projectId: widget.projectId, projectData: widget.projectData),
           _buildAllPhotosView(),
         ],
       ),

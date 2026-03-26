@@ -1,0 +1,706 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../screens/client/client_project_timeline.dart';
+import '../screens/client/design_preview_menu.dart';
+
+/// Floating dev tools panel for testing.
+/// Remove this file before production release.
+
+// Global state so it survives rebuilds
+String? devRoleOverride; // null = use Firestore role
+
+// Test accounts — remove before production
+const _devAccounts = [
+  {'label': 'GC', 'email': 'collinjmaddox@gmail.com', 'pass': 'Proverbs163', 'icon': Icons.construction},
+  {'label': 'Client', 'email': 'thatboycollin.07@gmail.com', 'pass': 'Proverbs163', 'icon': Icons.person},
+];
+
+class DevToolsOverlay extends StatefulWidget {
+  final Widget child;
+  final String firestoreRole;
+  final String currentRole;
+  final VoidCallback onToggleRole;
+
+  const DevToolsOverlay({
+    super.key,
+    required this.child,
+    required this.firestoreRole,
+    required this.currentRole,
+    required this.onToggleRole,
+  });
+
+  @override
+  State<DevToolsOverlay> createState() => _DevToolsOverlayState();
+}
+
+class _DevToolsOverlayState extends State<DevToolsOverlay> {
+  bool _expanded = false;
+  bool _switching = false;
+
+  Future<void> _switchAccount(String email, String pass) async {
+    setState(() => _switching = true);
+    try {
+      devRoleOverride = null;
+      await FirebaseAuth.instance.signOut();
+      await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: pass);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sign-in failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+    if (mounted) setState(() => _switching = false);
+  }
+
+  /// Reset the last approved milestone on project deta back to 'completed'
+  Future<void> _resetLastMilestone(BuildContext ctx) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final projects = await FirebaseFirestore.instance
+        .collection('projects')
+        .where('contractor_uid', isEqualTo: uid)
+        .where('project_name', isEqualTo: 'project deta')
+        .get();
+
+    if (projects.docs.isEmpty) {
+      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('project deta not found')));
+      return;
+    }
+
+    final projectRef = projects.docs.first.reference;
+    // Get all milestones and filter client-side to avoid composite index
+    final allMilestones = await projectRef.collection('milestones').orderBy('order').get();
+    // Find last approved or completed milestone to reset to awaiting_approval
+    final resettable = allMilestones.docs.where((d) {
+      final s = d.data()['status'];
+      return s == 'approved' || s == 'completed';
+    }).toList();
+    final milestones = resettable.isNotEmpty ? [resettable.last] : <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+    if (milestones.isEmpty) {
+      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('No milestones to reset')));
+      return;
+    }
+
+    final ms = milestones.first;
+    final msName = ms.data()['name'] ?? 'Unknown';
+
+    // Also delete the invoice for this milestone
+    final invoices = await projectRef.collection('invoices')
+        .where('milestone_id', isEqualTo: ms.id)
+        .get();
+    for (final inv in invoices.docs) {
+      await inv.reference.delete();
+    }
+
+    await ms.reference.update({
+      'status': 'awaiting_approval',
+      'approved_at': FieldValue.delete(),
+      'released_amount': FieldValue.delete(),
+      'transaction_fee': FieldValue.delete(),
+      'released_at': FieldValue.delete(),
+    });
+
+    if (ctx.mounted) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        SnackBar(content: Text('Reset "$msName" to completed'), backgroundColor: Colors.purple));
+    }
+  }
+
+  /// Create a realistic test project with milestones, change orders, updates
+  Future<void> _createTestProject(BuildContext ctx) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() => _switching = true);
+
+    try {
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final userDoc = await userRef.get();
+      final userData = userDoc.data() ?? {};
+      final businessName = userData['contractor_profile']?['business_name'] ?? 'Test Contractor';
+      final teamId = userData['team_id'] as String?;
+
+      // Client user ref - use known test client UID directly to avoid Firestore rules issue
+      // thatboycollin.07@gmail.com UID lookup
+      DocumentReference? clientRef;
+      try {
+        final clientQuery = await FirebaseFirestore.instance
+            .collection('users')
+            .where('email', isEqualTo: 'thatboycollin.07@gmail.com')
+            .get();
+        clientRef = clientQuery.docs.isNotEmpty ? clientQuery.docs.first.reference : null;
+      } catch (_) {
+        // Rules may block this query - that's fine, client_user_ref will be set when client opens the project
+        clientRef = null;
+      }
+
+      final now = DateTime.now();
+      final startDate = now.subtract(const Duration(days: 21));
+      final endDate = now.add(const Duration(days: 30));
+
+      // Create project
+      final projectRef = await FirebaseFirestore.instance.collection('projects').add({
+        'contractor_ref': userRef,
+        'contractor_uid': user.uid,
+        'contractor_email': user.email,
+        'contractor_business_name': businessName,
+        'team_id': teamId,
+        'assigned_member_uids': <String>[],
+        'assigned_sub_ids': <String>[],
+        'project_name': 'Smith Kitchen Remodel',
+        'client_name': 'Sarah Smith',
+        'client_email': 'thatboycollin.07@gmail.com',
+        'client_phone': '555-867-5309',
+        'client_user_ref': clientRef,
+        'start_date': Timestamp.fromDate(startDate),
+        'estimated_end_date': Timestamp.fromDate(endDate),
+        'actual_end_date': null,
+        'status': 'active',
+        'original_cost': 28500.0,
+        'current_cost': 30200.0,
+        'contract_document_url': null,
+        'milestones_enabled': true,
+        'payment_status': 'unpaid',
+        'invitation_ready': false,
+        'created_at': Timestamp.fromDate(startDate),
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+
+      // Milestones - mix of statuses
+      final milestones = [
+        {'name': 'Demo & Haul Away', 'description': 'Remove existing cabinets, countertops, flooring, and appliances. Haul away debris.', 'amount': 4500.0, 'order': 0, 'status': 'approved', 'approved_at': Timestamp.fromDate(now.subtract(const Duration(days: 14)))},
+        {'name': 'Rough Plumbing & Electrical', 'description': 'Run new water lines, drain relocations, dedicated circuits for appliances, undercabinet wiring.', 'amount': 6500.0, 'order': 1, 'status': 'approved', 'approved_at': Timestamp.fromDate(now.subtract(const Duration(days: 7)))},
+        {'name': 'Cabinets & Countertops', 'description': 'Install custom shaker cabinets, quartz countertops, undermount sink, and backsplash tile.', 'amount': 12000.0, 'order': 2, 'status': 'awaiting_approval'},
+        {'name': 'Appliances & Final Touches', 'description': 'Install appliances, hardware, trim, paint touch-ups, and final walkthrough.', 'amount': 5500.0, 'order': 3, 'status': 'not_started'},
+      ];
+
+      for (final m in milestones) {
+        final milestoneRef = await projectRef.collection('milestones').add({
+          ...m,
+          'created_at': FieldValue.serverTimestamp(),
+        });
+
+        // Add invoices for approved milestones
+        if (m['status'] == 'approved') {
+          final amount = m['amount'] as double;
+          final fee = amount * 0.05;
+          await projectRef.collection('invoices').add({
+            'invoice_number': 'INV-${now.millisecondsSinceEpoch.toString().substring(5)}${m['order']}',
+            'milestone_id': milestoneRef.id,
+            'milestone_name': m['name'],
+            'amount': amount,
+            'transaction_fee': fee,
+            'total_due': amount + fee,
+            'status': m['order'] == 0 ? 'paid' : 'sent',
+            'pdf_url': null,
+            'created_at': m['approved_at'],
+            'paid_at': m['order'] == 0 ? Timestamp.fromDate(now.subtract(const Duration(days: 12))) : null,
+          });
+        }
+      }
+
+      // Change order
+      await projectRef.collection('change_orders').add({
+        'title': 'Upgrade to Waterfall Edge Countertop',
+        'description': 'Client requested waterfall edge on island instead of standard bullnose. Additional quartz material and labor.',
+        'amount': 1700.0,
+        'status': 'approved',
+        'created_at': Timestamp.fromDate(now.subtract(const Duration(days: 10))),
+        'approved_at': Timestamp.fromDate(now.subtract(const Duration(days: 9))),
+      });
+
+      // Photo updates with placeholder images
+      final updates = [
+        {
+          'caption': 'Demo Day 1 - All upper and lower cabinets removed. Found minor water damage behind sink area, will patch before new install.',
+          'photo_url': 'https://picsum.photos/seed/demo1/800/600',
+          'days_ago': 18,
+        },
+        {
+          'caption': 'Rough plumbing complete! New water lines run for island sink. Dedicated gas line for range. Passed inspection.',
+          'photo_url': 'https://picsum.photos/seed/plumbing/800/600',
+          'days_ago': 14,
+        },
+        {
+          'caption': 'Electrical rough-in done. New 20-amp circuits for dishwasher and microwave. Undercabinet LED wiring in place.',
+          'photo_url': 'https://picsum.photos/seed/electrical/800/600',
+          'days_ago': 10,
+        },
+        {
+          'caption': 'Cabinets going in! Custom shaker cabinets being installed. Island base cabinet in place.',
+          'photo_url': 'https://picsum.photos/seed/cabinets/800/600',
+          'days_ago': 6,
+        },
+        {
+          'caption': 'Countertops measured and templated. Quartz slabs selected - going with Calacatta Gold.',
+          'photo_url': 'https://picsum.photos/seed/countertop/800/600',
+          'days_ago': 3,
+        },
+        {
+          'caption': 'Backsplash tile installed! White subway with dark grout. Really pulls the room together.',
+          'photo_url': 'https://picsum.photos/seed/backsplash/800/600',
+          'days_ago': 1,
+        },
+      ];
+
+      for (final u in updates) {
+        await projectRef.collection('updates').add({
+          'caption': u['caption'],
+          'photo_url': u['photo_url'],
+          'created_at': Timestamp.fromDate(now.subtract(Duration(days: u['days_ago'] as int))),
+          'contractor_uid': user.uid,
+          'posted_by_ref': userRef,
+          'posted_by_name': businessName,
+        });
+      }
+
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          const SnackBar(content: Text('Test project "Smith Kitchen Remodel" created!'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+
+    setState(() => _switching = false);
+  }
+
+  /// Delete all projects except the ones in keepNames
+  Future<void> _cleanupProjects(BuildContext ctx) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    const keepNames = {'project deta'}; // projects to keep
+
+    final snap = await FirebaseFirestore.instance
+        .collection('projects')
+        .where('contractor_uid', isEqualTo: uid)
+        .get();
+
+    final toDelete = snap.docs.where((d) {
+      final name = (d.data()['project_name'] as String?) ?? '';
+      return !keepNames.contains(name);
+    }).toList();
+
+    if (toDelete.isEmpty) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          const SnackBar(content: Text('Nothing to delete'), backgroundColor: Colors.grey));
+      }
+      return;
+    }
+
+    // Confirm
+    final confirmed = await showDialog<bool>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete test projects?'),
+        content: Text('This will delete ${toDelete.length} projects:\n${toDelete.map((d) => "• ${d.data()['project_name']}").join('\n')}\n\nKeeping: ${keepNames.join(', ')}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _switching = true);
+
+    // Skip 'messages' — Firestore rules block client-side deletion (allow delete: if false)
+    final subcollections = ['milestones', 'updates', 'change_orders', 'expenses', 'documents', 'time_entries', 'invoices'];
+    int deleted = 0;
+
+    for (final doc in toDelete) {
+      final ref = doc.reference;
+      for (final sub in subcollections) {
+        try {
+          final subDocs = await ref.collection(sub).get();
+          for (final sd in subDocs.docs) {
+            if (sub == 'milestones') {
+              try {
+                final crs = await sd.reference.collection('change_requests').get();
+                for (final cr in crs.docs) { await cr.reference.delete(); }
+              } catch (_) {}
+            }
+            await sd.reference.delete();
+          }
+        } catch (e) {
+          debugPrint('Cleanup: skipping $sub on ${doc.id}: $e');
+        }
+      }
+      try {
+        await ref.delete();
+        deleted++;
+      } catch (e) {
+        debugPrint('Cleanup: failed to delete project ${doc.id}: $e');
+      }
+    }
+
+    if (ctx.mounted) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        SnackBar(content: Text('Deleted $deleted projects'), backgroundColor: Colors.green));
+    }
+    setState(() => _switching = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isClient = widget.currentRole == 'client';
+    final color = isClient ? Colors.orange : Colors.blue;
+    final currentEmail = FirebaseAuth.instance.currentUser?.email ?? '';
+
+    return Stack(
+      children: [
+        widget.child,
+        // Loading overlay during account switch
+        if (_switching)
+          Container(
+            color: Colors.black54,
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 12),
+                  Text('Switching account...', style: TextStyle(color: Colors.white, fontSize: 14)),
+                ],
+              ),
+            ),
+          ),
+        // Floating dev button
+        Positioned(
+          left: 8,
+          bottom: 100,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Expanded panel
+              if (_expanded) ...[
+                Container(
+                  width: 270,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 8)],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Icon(Icons.bug_report, color: Colors.amber, size: 18),
+                          const SizedBox(width: 6),
+                          const Text('Dev Tools',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: () => setState(() => _expanded = false),
+                            child: Icon(Icons.close, color: Colors.white54, size: 18),
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Colors.white24),
+
+                      // Account switcher
+                      const Text('SWITCH ACCOUNT',
+                          style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: _devAccounts.map((acct) {
+                          final isCurrent = currentEmail == acct['email'];
+                          return Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              child: GestureDetector(
+                                onTap: isCurrent ? null : () => _switchAccount(acct['email'] as String, acct['pass'] as String),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isCurrent ? Colors.green.withOpacity(0.25) : Colors.white.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: isCurrent ? Border.all(color: Colors.green, width: 1.5) : null,
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Icon(acct['icon'] as IconData, color: isCurrent ? Colors.green : Colors.white54, size: 20),
+                                      const SizedBox(height: 4),
+                                      Text(acct['label'] as String,
+                                          style: TextStyle(
+                                            color: isCurrent ? Colors.green : Colors.white70,
+                                            fontSize: 11,
+                                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                          )),
+                                      if (isCurrent)
+                                        const Text('active', style: TextStyle(color: Colors.green, fontSize: 9)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Reset last milestone button
+                      GestureDetector(
+                        onTap: _switching ? null : () => _resetLastMilestone(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.replay, color: Colors.purple[300], size: 18),
+                              const SizedBox(width: 8),
+                              Text('Reset last milestone (project deta)',
+                                  style: TextStyle(color: Colors.purple[300], fontWeight: FontWeight.bold, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Cleanup button
+                      GestureDetector(
+                        onTap: _switching ? null : () => _cleanupProjects(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_sweep, color: Colors.red[300], size: 18),
+                              const SizedBox(width: 8),
+                              Text('Cleanup test projects',
+                                  style: TextStyle(color: Colors.red[300], fontWeight: FontWeight.bold, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Create test project button
+                      GestureDetector(
+                        onTap: _switching ? null : () => _createTestProject(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.add_business, color: Colors.teal[300], size: 18),
+                              const SizedBox(width: 8),
+                              Text('Create test project',
+                                  style: TextStyle(color: Colors.teal[300], fontWeight: FontWeight.bold, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Design preview button
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => const DesignPreviewMenu(),
+                          ));
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.indigo.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.palette, color: Colors.indigo[300], size: 18),
+                              const SizedBox(width: 8),
+                              Text('Preview designs',
+                                  style: TextStyle(color: Colors.indigo[300], fontWeight: FontWeight.bold, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Role toggle (view swap without re-auth)
+                      const Text('VIEW AS',
+                          style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                      const SizedBox(height: 6),
+                      GestureDetector(
+                        onTap: widget.onToggleRole,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.swap_horiz, color: color, size: 18),
+                              const SizedBox(width: 8),
+                              Text('Switch to ${isClient ? "CONTRACTOR" : "CLIENT"} view',
+                                  style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // View any project as client
+                      const Text('OPEN PROJECT AS CLIENT',
+                          style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        height: 180,
+                        child: _ProjectPickerList(),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+
+              // Collapsed pill button
+              GestureDetector(
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 4)],
+                  ),
+                  child: Text(
+                    'DEV: ${widget.currentRole.toUpperCase()}',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Lists all projects for the current user's team so you can tap one
+/// and jump straight into the client timeline view.
+class _ProjectPickerList extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const Center(child: Text('Not signed in', style: TextStyle(color: Colors.white54)));
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('projects')
+          .where('contractor_uid', isEqualTo: uid)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+
+        final docs = snap.data!.docs;
+        if (docs.isEmpty) {
+          return const Center(
+            child: Text('No projects found', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          );
+        }
+
+        return ListView.builder(
+          padding: EdgeInsets.zero,
+          itemCount: docs.length,
+          itemBuilder: (context, i) {
+            final data = docs[i].data() as Map<String, dynamic>;
+            final name = data['project_name'] ?? 'Untitled';
+            final client = data['client_name'] ?? '';
+
+            return FutureBuilder<QuerySnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection('projects')
+                  .doc(docs[i].id)
+                  .collection('milestones')
+                  .where('status', isEqualTo: 'awaiting_approval')
+                  .get(),
+              builder: (context, mileSnap) {
+                final awaitingCount = mileSnap.data?.docs.length ?? 0;
+
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => ClientProjectTimeline(
+                        projectId: docs[i].id,
+                        projectData: data,
+                        isPreview: true,
+                      ),
+                    ));
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: awaitingCount > 0 ? Colors.orange.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name,
+                                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis),
+                              if (client.isNotEmpty)
+                                Text(client,
+                                    style: const TextStyle(color: Colors.white54, fontSize: 10),
+                                    overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
+                        if (awaitingCount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.orange,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text('$awaitingCount',
+                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right, color: Colors.white38, size: 16),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}

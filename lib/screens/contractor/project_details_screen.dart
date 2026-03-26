@@ -8,6 +8,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'create_change_order_screen.dart';
 import 'manage_milestones_screen.dart';
 import 'edit_milestones_screen.dart';
@@ -1433,9 +1434,44 @@ Looking forward to working with you!
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () async {
-                                await Share.shareXFiles(
-                                  [],
-                                  text: 'Invoice $invoiceNumber: $pdfUrl',
+                                try {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Downloading...'), duration: Duration(seconds: 1)),
+                                  );
+                                  final ref = FirebaseStorage.instance.refFromURL(pdfUrl);
+                                  final bytes = await ref.getData();
+                                  if (bytes == null) throw Exception('Download failed');
+                                  final dir = await getTemporaryDirectory();
+                                  final file = File('${dir.path}/$invoiceNumber.pdf');
+                                  await file.writeAsBytes(bytes);
+                                  await Share.shareXFiles(
+                                    [XFile(file.path, mimeType: 'application/pdf')],
+                                    subject: 'Invoice $invoiceNumber',
+                                  );
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Download failed: $e'), backgroundColor: Colors.red),
+                                    );
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.download, size: 16),
+                              label: const Text('Download'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                        if (pdfUrl != null)
+                          const SizedBox(width: 8),
+                        if (pdfUrl != null)
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                await Share.share(
+                                  'Invoice $invoiceNumber\n$pdfUrl',
                                   subject: 'Invoice $invoiceNumber',
                                 );
                               },

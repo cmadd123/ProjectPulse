@@ -11,15 +11,15 @@ class InvoiceService {
 
   /// Generate PDF invoice, upload to Storage, create Firestore doc.
   /// Called after a milestone is approved.
-  static Future<void> generateAndSave({
+  static Future<String?> generateAndSave({
     required String projectId,
     required String milestoneId,
     required String milestoneName,
     required double milestoneAmount,
     required Map<String, dynamic> projectData,
   }) async {
-    // Calculate fee: 1% capped at $1000
-    final fee = (milestoneAmount * 0.01).clamp(0, 1000).toDouble();
+    // Payment processing fee: flat 5% (Stripe ~4% + ProjectPulse 1%)
+    final fee = (milestoneAmount * 0.05);
     final totalDue = milestoneAmount + fee;
     final invoiceNumber =
         'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
@@ -46,7 +46,7 @@ class InvoiceService {
     final pdfUrl = await storageRef.getDownloadURL();
 
     // Create invoice doc in Firestore
-    await FirebaseFirestore.instance
+    final invoiceDoc = await FirebaseFirestore.instance
         .collection('projects')
         .doc(projectId)
         .collection('invoices')
@@ -74,6 +74,8 @@ class InvoiceService {
       'transaction_fee': fee,
       'released_at': FieldValue.serverTimestamp(),
     });
+
+    return invoiceDoc.id;
   }
 
   static Future<Uint8List> _buildPdf({
@@ -250,7 +252,7 @@ class InvoiceService {
                             ),
                             pw.SizedBox(height: 2),
                             pw.Text(
-                              'Milestone payment — approved ${DateFormat('M/d/yyyy').format(DateTime.now())}',
+                              'Milestone payment - approved ${DateFormat('M/d/yyyy').format(DateTime.now())}',
                               style: const pw.TextStyle(
                                   fontSize: 10, color: PdfColors.grey600),
                             ),
@@ -273,7 +275,7 @@ class InvoiceService {
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(10),
                         child: pw.Text(
-                          'Processing fee (1%)',
+                          'Payment Processing Fee',
                           style: const pw.TextStyle(
                               fontSize: 11, color: PdfColors.grey600),
                         ),

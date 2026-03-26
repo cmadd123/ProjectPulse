@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:intl/intl.dart';
 import 'utils/auth_utils.dart';
+import 'dev/dev_tools_overlay.dart';
 import 'screens/contractor/contractor_profile_screen.dart';
 import 'screens/contractor/contractor_profile_setup_screen.dart';
 import 'screens/contractor/create_project_screen.dart';
@@ -410,11 +411,21 @@ class _RoleDetectionScreenState extends State<RoleDetectionScreen> {
           final role = data?['role'] as String?;
 
           if (role == 'contractor') {
-            return const ContractorHomeScreen();
+            return DevToolsOverlay(
+              firestoreRole: 'contractor',
+              currentRole: devRoleOverride ?? 'contractor',
+              onToggleRole: () {},
+              child: const ContractorHomeScreen(),
+            );
           } else if (role == 'team_member') {
             return const TeamMemberHomeScreen();
           } else if (role == 'client') {
-            return const ClientDashboardScreen();
+            return DevToolsOverlay(
+              firestoreRole: 'client',
+              currentRole: devRoleOverride ?? 'client',
+              onToggleRole: () {},
+              child: const ClientDashboardScreen(),
+            );
           }
         }
 

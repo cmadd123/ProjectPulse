@@ -1,5 +1,69 @@
 # ProjectPulse — Claude Code Notes
 
+## Dev Loop: ADB Phone Testing
+
+Connect to the user's Samsung A15 via USB for live testing. Phone must have USB Debugging enabled (Developer Options) and USB mode set to File Transfer.
+
+**ADB path**: `C:\Users\cmadd\AppData\Local\Android\Sdk\platform-tools\adb.exe`
+**Package**: `com.consciousapps.projectpulse` / `.MainActivity`
+**Flutter SDK**: `C:\Users\cmadd\development\flutter`
+**Build**: `cd ProjectPulse && flutter build apk --debug`
+**Install**: `adb install -r build/app/outputs/flutter-apk/app-debug.apk`
+
+**Screen reading**: `MSYS_NO_PATHCONV=1 adb shell "uiautomator dump /sdcard/window_dump.xml && cat /sdcard/window_dump.xml"`
+**Tap**: `adb shell input tap X Y`
+**Screenshot**: `adb shell screencap /sdcard/screen.png && adb pull /sdcard/screen.png`
+**Swipe**: `adb shell input swipe x1 y1 x2 y2 duration`
+
+**Dev Tools Overlay** (orange/blue pill at bottom-left of app):
+- One-tap account switch between GC and Client (no manual login)
+- Role toggle: swap contractor/client views
+- Open any project as client preview
+- Cleanup button: delete test projects (keeps "project deta")
+
+**Test accounts**:
+- GC: collinjmaddox@gmail.com / Proverbs163
+- Client: thatboycollin.07@gmail.com / Proverbs163
+
+**Gotchas**:
+- `MSYS_NO_PATHCONV=1` required before `adb shell` commands on Windows/Git Bash
+- ADB `input text` can't type `@` or `.` on Samsung — use dev tools account switcher instead
+- Always use full ADB path or set it in a variable: `ADB="/c/Users/cmadd/AppData/Local/Android/Sdk/platform-tools/adb.exe"`
+
+---
+
+## WHERE WE LEFT OFF (2026-03-25)
+
+**Resume here in a new session.**
+
+### Just completed:
+- Cleaned up 8 test projects, only "project deta" remains
+- Invoice generation verified working (2 invoices created for Cabinets & Finishes + Final Walkthrough)
+- Share button fixed (`Share.share()` instead of broken `Share.shareXFiles([])`)
+- Invoice email Cloud Function deployed (`sendInvoiceEmail` in `functions/index.js`)
+- Dev tools overlay has: account switcher, cleanup button, reset milestone button
+- Firestore rules updated: added `invoices` subcollection rules, fixed `messages` delete rule
+- Dev loop setup added to both ProjectPulse and MomRise CLAUDE.md files
+
+### Next steps (in order):
+1. **Test invoice email** — Reset "Final Walkthrough" milestone and re-approve to trigger email
+   - Open dev panel → tap "Reset last milestone (project deta)" — this sets last approved/completed milestone back to `awaiting_approval`
+   - Then tap "project deta" in "OPEN PROJECT AS CLIENT" section
+   - Scroll to Final Walkthrough → tap Approve → confirm
+   - Check thatboycollin.07@gmail.com for invoice email
+   - If reset button doesn't work, the milestone may already be at `awaiting_approval` — just open as client and approve
+
+2. **Test Share button** — On GC view, open project deta → Invoices tab (tab 6) → tap Share on an invoice
+
+3. **Continue with CLAUDE.md Action Plan** — Phase 2 & 3 bug fixes (see ACTION PLAN section below)
+
+### Known issues this session:
+- `_loadTeamId` error in main.dart:1125 — pre-existing, doesn't block functionality
+- PDF font warning: "Helvetica has no Unicode support" and can't draw em dash (U+2014) — cosmetic, invoice still generates
+- Notification listener has permission-denied on `recipient_uid` query — needs Firestore index or rule fix
+
+---
+
 ## ✅ INVOICE GENERATION FIXED (2026-03-23)
 
 **BLOCKER RESOLVED**: Invoices were failing silently during milestone approval.

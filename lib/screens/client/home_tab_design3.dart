@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../backend/schema/milestone_record.dart';
 import '../../services/notification_service.dart';
 import '../../services/connectivity_service.dart';
+import '../../services/invoice_service.dart';
 
 /// Design 3: Personality Injection (Polished Current)
 /// Keep existing layout, add warmth and human touches
@@ -29,7 +30,7 @@ class HomeTabDesign3 extends StatefulWidget {
 class _HomeTabDesign3State extends State<HomeTabDesign3> {
   bool _welcomeMessageDismissed = false;
 
-  Future<void> _approveMilestone(String milestoneId, String milestoneName) async {
+  Future<void> _approveMilestone(String milestoneId, String milestoneName, double milestoneAmount) async {
     try {
       await MilestoneRecord.updateMilestone(widget.projectId, milestoneId, {
         'status': 'approved',
@@ -43,14 +44,27 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
         milestoneName: milestoneName,
       );
 
+      // Generate invoice
+      String? invoiceId;
+      try {
+        invoiceId = await InvoiceService.generateAndSave(
+          projectId: widget.projectId,
+          milestoneId: milestoneId,
+          milestoneName: milestoneName,
+          milestoneAmount: milestoneAmount,
+          projectData: widget.projectData,
+        );
+      } catch (invoiceErr) {
+        debugPrint('Invoice generation failed: $invoiceErr');
+      }
+
       if (mounted) {
         ConnectivityService.showOfflineWriteFeedback(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Milestone approved!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        // Show payment dialog after a short delay so rebuild completes
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (mounted) {
+          _showPaymentDialog(milestoneName, milestoneAmount, invoiceId);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -59,6 +73,91 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
         );
       }
     }
+  }
+
+  void _showPaymentDialog(String milestoneName, double milestoneAmount, String? invoiceId) {
+    final fee = milestoneAmount * 0.05;
+    final total = milestoneAmount + fee;
+    final currencyFmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: Colors.green[50], shape: BoxShape.circle),
+                child: Icon(Icons.check, color: Colors.green[700], size: 32),
+              ),
+              const SizedBox(height: 12),
+              const Text('Milestone Approved!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(milestoneName, style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50], borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Column(children: [
+                  _dialogRow('Milestone Amount', currencyFmt.format(milestoneAmount)),
+                  const SizedBox(height: 8),
+                  _dialogRow('Processing Fee', currencyFmt.format(fee), valueColor: Colors.grey[500]),
+                  const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider(height: 1)),
+                  _dialogRow('Total', currencyFmt.format(total), isBold: true),
+                ]),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity, height: 52,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    if (invoiceId != null) {
+                      try { await InvoiceService.markAsPaid(widget.projectId, invoiceId); } catch (_) {}
+                    }
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Payment complete for $milestoneName!'), backgroundColor: Colors.green),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[600], foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0,
+                  ),
+                  child: Text('Pay ${currencyFmt.format(total)}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Pay Later', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dialogRow(String label, String value, {bool isBold = false, Color? valueColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(fontSize: 14, fontWeight: isBold ? FontWeight.w700 : FontWeight.normal, color: isBold ? Colors.black : Colors.grey[600])),
+        Text(value, style: TextStyle(fontSize: isBold ? 18 : 14, fontWeight: isBold ? FontWeight.w700 : FontWeight.w600, color: valueColor ?? (isBold ? Colors.black : null))),
+      ],
+    );
   }
 
   Future<void> _respondToChangeOrder(String changeOrderId, bool approve) async {
@@ -411,7 +510,7 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
     final data = doc.data() as Map<String, dynamic>;
     final name = data['name'] as String? ?? 'Milestone';
     final description = data['description'] as String? ?? '';
-    final amount = data['payment_amount'] as num? ?? 0;
+    final amount = (data['payment_amount'] as num? ?? data['amount'] as num? ?? 0).toDouble();
     final icon = data['icon'] as String? ?? '💵';
 
     return Container(
@@ -484,19 +583,19 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () => widget.onTabSwitch(3), // Navigate to Milestones tab
+                  onPressed: () => _approveMilestone(doc.id, name, amount),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[600],
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12), // Match outlined button height
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('Approve'),
+                      const Icon(Icons.check, size: 18),
                       const SizedBox(width: 4),
-                      Icon(Icons.chevron_right, size: 18),
+                      const Text('Approve'),
                     ],
                   ),
                 ),
@@ -700,8 +799,75 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
             amount: '\$${currentCost.toStringAsFixed(0)}',
             isBold: true,
           ),
+          // Payment History
+          _buildPaymentHistory(),
         ],
       ),
+    );
+  }
+
+  Widget _buildPaymentHistory() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId)
+          .collection('invoices')
+          .orderBy('created_at', descending: true)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData || snap.data!.docs.isEmpty) return const SizedBox.shrink();
+
+        final invoices = snap.data!.docs;
+        final currencyFmt = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+        final paidTotal = invoices
+            .where((d) => (d.data() as Map<String, dynamic>)['status'] == 'paid')
+            .fold<double>(0, (sum, d) => sum + ((d.data() as Map<String, dynamic>)['amount'] as num? ?? 0).toDouble());
+        final outstandingTotal = invoices
+            .where((d) => (d.data() as Map<String, dynamic>)['status'] != 'paid')
+            .fold<double>(0, (sum, d) => sum + ((d.data() as Map<String, dynamic>)['total_due'] as num? ?? 0).toDouble());
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
+            const Text('📋 Payment History', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            ...invoices.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final name = data['milestone_name'] as String? ?? '';
+              final amount = (data['total_due'] as num?)?.toDouble() ?? 0;
+              final isPaid = data['status'] == 'paid';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Icon(isPaid ? Icons.check_circle : Icons.schedule, size: 16,
+                      color: isPaid ? Colors.green : Colors.orange),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(name, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                    Text(currencyFmt.format(amount), style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600,
+                      color: isPaid ? Colors.green[700] : Colors.orange[700],
+                    )),
+                  ],
+                ),
+              );
+            }),
+            if (paidTotal > 0 || outstandingTotal > 0) ...[
+              const SizedBox(height: 4),
+              const Divider(),
+              const SizedBox(height: 6),
+              if (paidTotal > 0) _BudgetRow(label: 'Paid:', amount: currencyFmt.format(paidTotal)),
+              if (outstandingTotal > 0) ...[
+                const SizedBox(height: 4),
+                _BudgetRow(label: 'Outstanding:', amount: currencyFmt.format(outstandingTotal)),
+              ],
+            ],
+          ],
+        );
+      },
     );
   }
 
