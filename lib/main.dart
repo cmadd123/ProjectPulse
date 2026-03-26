@@ -25,6 +25,7 @@ import 'services/connectivity_service.dart';
 import 'screens/shared/notification_center_screen.dart';
 import 'data/demo_project_data.dart';
 import 'components/skeleton_loader.dart';
+import 'screens/dev/email_preview_screen.dart';
 
 /// Snappy slide-up + fade page transition (200ms)
 class SlideUpRoute<T> extends PageRouteBuilder<T> {
@@ -162,7 +163,7 @@ class ProjectPulseApp extends StatelessWidget {
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18), // Increased from 16 to 18 to prevent text cutoff
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
@@ -633,12 +634,13 @@ class _AuthScreenState extends State<AuthScreen> {
                 // Submit button
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 56,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _submitAuth,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
                       foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -1084,7 +1086,7 @@ class _ContractorProjectsScreenState
   @override
   void initState() {
     super.initState();
-    _loadTeamId();
+    // TEMPORARILY DISABLED: _loadTeamId();
     _aggregateTimer; // start the timer
   }
 
@@ -1096,39 +1098,382 @@ class _ContractorProjectsScreenState
   }
 
   Future<void> _loadTeamId() async {
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    debugPrint('🔍 TEAM LOADING: Starting comprehensive team detection');
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
     final user = FirebaseAuth.instance.currentUser!;
-    final teamSnap = await FirebaseFirestore.instance
-        .collection('teams')
-        .where('owner_uid', isEqualTo: user.uid)
-        .limit(1)
-        .get();
-    if (teamSnap.docs.isNotEmpty && mounted) {
-      setState(() => _teamId = teamSnap.docs.first.id);
-      _loadTodaySchedule();
+    debugPrint('👤 Current User: ${user.uid}');
+    debugPrint('📧 Email: ${user.email}');
+
+    // Method 1: Check user document for team_id field
+    debugPrint('\n📋 METHOD 1: Checking user document for team_id field...');
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (userDoc.exists) {
+        final userData = userDoc.data()!;
+        debugPrint('✅ User document exists');
+        debugPrint('📄 Fields: ${userData.keys.join(", ")}');
+
+        final teamIdFromUser = userData['team_id'];
+        if (teamIdFromUser != null) {
+          debugPrint('✅ Found team_id in user doc: $teamIdFromUser');
+
+          // Verify this team actually exists
+          final teamDoc = await FirebaseFirestore.instance
+              .collection('teams')
+              .doc(teamIdFromUser)
+              .get();
+
+          if (teamDoc.exists) {
+            debugPrint('✅ Team document verified to exist');
+            final teamData = teamDoc.data()!;
+            debugPrint('🏢 Team name: ${teamData['name']}');
+            debugPrint('👥 Member UIDs: ${teamData['member_uids']}');
+
+            if (mounted) {
+              setState(() => _teamId = teamIdFromUser);
+              debugPrint('✅ Team ID set in state: $_teamId');
+              await _loadTodaySchedule();
+            }
+            return; // Success - exit early
+          } else {
+            debugPrint('❌ WARNING: team_id in user doc points to non-existent team!');
+            debugPrint('🧹 Cleaning up bad team_id reference...');
+            await userDoc.reference.update({'team_id': FieldValue.delete()});
+          }
+        } else {
+          debugPrint('⚠️ No team_id field found in user document');
+        }
+      } else {
+        debugPrint('❌ User document does not exist!');
+      }
+    } catch (e) {
+      debugPrint('❌ Error checking user document: $e');
+    }
+
+    // Method 2: Query teams collection for teams owned by this user
+    debugPrint('\n📋 METHOD 2: Querying teams collection by owner_uid...');
+    try {
+      final teamQuery = await FirebaseFirestore.instance
+          .collection('teams')
+          .where('owner_uid', isEqualTo: user.uid)
+          .get();
+
+      debugPrint('📊 Query returned ${teamQuery.docs.length} teams');
+
+      if (teamQuery.docs.isNotEmpty) {
+        for (var i = 0; i < teamQuery.docs.length; i++) {
+          final doc = teamQuery.docs[i];
+          final data = doc.data();
+          debugPrint('  Team ${i + 1}:');
+          debugPrint('    ID: ${doc.id}');
+          debugPrint('    Name: ${data['name']}');
+          debugPrint('    Owner UID: ${data['owner_uid']}');
+          debugPrint('    Member UIDs: ${data['member_uids']}');
+        }
+
+        // Use first team found
+        final teamId = teamQuery.docs.first.id;
+        debugPrint('✅ Using first team: $teamId');
+
+        // Update user document with team_id for future lookups
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({'team_id': teamId});
+        debugPrint('✅ Updated user document with team_id');
+
+        if (mounted) {
+          setState(() => _teamId = teamId);
+          debugPrint('✅ Team ID set in state: $_teamId');
+          await _loadTodaySchedule();
+        }
+        return; // Success - exit early
+      } else {
+        debugPrint('⚠️ No teams found owned by this user');
+      }
+    } catch (e) {
+      debugPrint('❌ Error querying teams: $e');
+    }
+
+    // Method 3: Check if user is a member of any teams
+    debugPrint('\n📋 METHOD 3: Scanning all teams to see if user is a member...');
+    try {
+      final allTeamsSnap = await FirebaseFirestore.instance
+          .collection('teams')
+          .get();
+
+      debugPrint('📊 Total teams in database: ${allTeamsSnap.docs.length}');
+
+      for (var teamDoc in allTeamsSnap.docs) {
+        final data = teamDoc.data();
+        final memberUids = (data['member_uids'] as List?)?.cast<String>() ?? [];
+
+        if (memberUids.contains(user.uid)) {
+          debugPrint('✅ Found user in team: ${teamDoc.id}');
+          debugPrint('   Team name: ${data['name']}');
+          debugPrint('   Owner: ${data['owner_uid']}');
+
+          // Update user document with team_id
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .update({'team_id': teamDoc.id});
+          debugPrint('✅ Updated user document with team_id');
+
+          if (mounted) {
+            setState(() => _teamId = teamDoc.id);
+            debugPrint('✅ Team ID set in state: $_teamId');
+            await _loadTodaySchedule();
+          }
+          return; // Success - exit early
+        }
+      }
+
+      debugPrint('⚠️ User is not a member of any teams');
+    } catch (e) {
+      debugPrint('❌ Error scanning teams: $e');
+    }
+
+    // If we get here, no team exists - create one
+    debugPrint('\n🏗️ NO TEAM FOUND: Creating default team automatically...');
+    await _createDefaultTeam();
+  }
+
+  Future<void> _createDefaultTeam() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser!;
+
+      // Get user profile for business name
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      debugPrint('📄 User document exists: ${userDoc.exists}');
+
+      final userData = userDoc.data();
+      debugPrint('📄 User data: ${userData?.keys.join(", ")}');
+
+      final businessName = userData?['contractor_profile']?['business_name'] ?? 'My Business';
+      final ownerName = userData?['contractor_profile']?['owner_name'] ?? user.displayName ?? 'Owner';
+
+      debugPrint('🏗️ Creating team: $businessName (owner: $ownerName)');
+
+      // Create team
+      final teamRef = await FirebaseFirestore.instance.collection('teams').add({
+        'owner_uid': user.uid,
+        'name': businessName,
+        'member_uids': [user.uid],
+        'created_at': FieldValue.serverTimestamp(),
+      });
+
+      debugPrint('✅ Team created: ${teamRef.id}');
+
+      // Add owner as first team member
+      await teamRef.collection('members').doc(user.uid).set({
+        'name': ownerName,
+        'email': user.email,
+        'role': 'owner',
+        'added_at': FieldValue.serverTimestamp(),
+        'status': 'active',
+        'user_ref': FirebaseFirestore.instance.collection('users').doc(user.uid),
+        'user_uid': user.uid,
+      });
+
+      debugPrint('✅ Owner added to team members');
+
+      // Update user document with team_id
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({'team_id': teamRef.id});
+
+      debugPrint('✅ User updated with team_id');
+
+      if (mounted) {
+        setState(() => _teamId = teamRef.id);
+        debugPrint('🎯 State updated with teamId: $_teamId');
+        _loadTodaySchedule();
+      } else {
+        debugPrint('⚠️ Widget not mounted, cannot update state');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error creating default team: $e');
+      debugPrint('Stack trace: $stackTrace');
+
+      // Show error to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to create team: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
   Future<void> _loadTodaySchedule() async {
-    if (_teamId == null) return;
-    final now = DateTime.now();
-    final todayStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    debugPrint('📅 SCHEDULE LOADING: Starting comprehensive schedule detection');
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-    final scheduleSnap = await FirebaseFirestore.instance
-        .collection('teams')
-        .doc(_teamId)
-        .collection('schedule_entries')
-        .where('date', isEqualTo: todayStr)
-        .get();
-
-    if (mounted) {
-      setState(() {
-        _todaySchedule = scheduleSnap.docs
-            .map((d) => d.data())
-            .toList();
-        _scheduleLoaded = true;
-      });
+    if (_teamId == null) {
+      debugPrint('❌ CRITICAL: No team ID available - cannot load schedule');
+      debugPrint('   This should never happen if team loading worked correctly');
+      if (mounted) {
+        setState(() {
+          _todaySchedule = [];
+          _scheduleLoaded = true;
+        });
+      }
+      return;
     }
+
+    debugPrint('✅ Team ID: $_teamId');
+
+    try {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      debugPrint('🗓️ Today\'s date: $today');
+      debugPrint('   Year: ${today.year}, Month: ${today.month}, Day: ${today.day}');
+
+      // Load ALL schedule entries
+      final collectionPath = 'teams/$_teamId/schedule_entries';
+      debugPrint('\n📂 Loading from: $collectionPath');
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('teams')
+          .doc(_teamId)
+          .collection('schedule_entries')
+          .get();
+
+      debugPrint('📊 Total entries in database: ${snapshot.docs.length}');
+
+      if (snapshot.docs.isEmpty) {
+        debugPrint('⚠️ WARNING: No schedule entries found at all!');
+        debugPrint('   Path checked: $collectionPath');
+        debugPrint('   This means either:');
+        debugPrint('   1. No one has been scheduled yet');
+        debugPrint('   2. Schedule entries are being saved to wrong location');
+        if (mounted) {
+          setState(() {
+            _todaySchedule = [];
+            _scheduleLoaded = true;
+          });
+        }
+        return;
+      }
+
+      // Detailed analysis of each entry
+      debugPrint('\n📋 ANALYZING ALL ${snapshot.docs.length} SCHEDULE ENTRIES:');
+      debugPrint('─────────────────────────────────────────────────────────────');
+
+      final todayList = <Map<String, dynamic>>[];
+      int matchCount = 0;
+      int skipCount = 0;
+
+      for (var i = 0; i < snapshot.docs.length; i++) {
+        final doc = snapshot.docs[i];
+        final data = doc.data();
+
+        debugPrint('\n📌 Entry ${i + 1}/${snapshot.docs.length}:');
+        debugPrint('   Document ID: ${doc.id}');
+
+        // Show ALL fields in this entry
+        debugPrint('   All fields: ${data.keys.join(", ")}');
+
+        // Extract key data
+        final userName = data['user_name'] ?? data['sub_name'] ?? 'Unknown';
+        final projectName = data['project_name'] ?? 'Unassigned';
+        final projectId = data['project_id'] ?? 'none';
+        final type = data['type'] ?? 'unknown';
+
+        debugPrint('   Person: $userName');
+        debugPrint('   Project: $projectName ($projectId)');
+        debugPrint('   Type: $type');
+
+        // Check date field
+        final dateField = data['date'];
+        debugPrint('   Date field type: ${dateField.runtimeType}');
+
+        if (dateField == null) {
+          debugPrint('   ❌ SKIP: No date field!');
+          skipCount++;
+          continue;
+        }
+
+        if (dateField is! Timestamp) {
+          debugPrint('   ❌ SKIP: Date is not a Timestamp (it\'s ${dateField.runtimeType})');
+          debugPrint('   Date value: $dateField');
+          skipCount++;
+          continue;
+        }
+
+        final entryDateTime = dateField.toDate();
+        final entryDate = DateTime(entryDateTime.year, entryDateTime.month, entryDateTime.day);
+
+        debugPrint('   Date: $entryDate');
+        debugPrint('   Date breakdown: Year=${entryDate.year}, Month=${entryDate.month}, Day=${entryDate.day}');
+
+        // Compare dates
+        final sameYear = entryDate.year == today.year;
+        final sameMonth = entryDate.month == today.month;
+        final sameDay = entryDate.day == today.day;
+
+        debugPrint('   Comparison with today ($today):');
+        debugPrint('     Year match: $sameYear (${entryDate.year} vs ${today.year})');
+        debugPrint('     Month match: $sameMonth (${entryDate.month} vs ${today.month})');
+        debugPrint('     Day match: $sameDay (${entryDate.day} vs ${today.day})');
+
+        if (sameYear && sameMonth && sameDay) {
+          debugPrint('   ✅ MATCH: This is for TODAY!');
+          todayList.add(data);
+          matchCount++;
+        } else {
+          debugPrint('   ❌ SKIP: Different date');
+          skipCount++;
+        }
+      }
+
+      debugPrint('\n─────────────────────────────────────────────────────────────');
+      debugPrint('📊 FINAL RESULTS:');
+      debugPrint('   Total entries checked: ${snapshot.docs.length}');
+      debugPrint('   Matched today: $matchCount');
+      debugPrint('   Skipped (other dates): $skipCount');
+      debugPrint('   Today\'s schedule size: ${todayList.length}');
+
+      if (mounted) {
+        setState(() {
+          _todaySchedule = todayList;
+          _scheduleLoaded = true;
+        });
+        debugPrint('✅ State updated successfully');
+        debugPrint('   _scheduleLoaded = $_scheduleLoaded');
+        debugPrint('   _todaySchedule.length = ${_todaySchedule.length}');
+      } else {
+        debugPrint('⚠️ Widget not mounted, skipped state update');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ ERROR loading schedule: $e');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
+        setState(() {
+          _todaySchedule = [];
+          _scheduleLoaded = true;
+        });
+      }
+    }
+
+    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   }
 
   Future<void> _loadAggregates(List<QueryDocumentSnapshot> projects, {bool force = false}) async {
@@ -1188,17 +1533,30 @@ class _ContractorProjectsScreenState
     }
 
     if (mounted) {
-      setState(() {
-        _totalMilestones = totalM;
-        _completedMilestones = completedM;
-        _awaitingApproval = awaitingM;
-        _pendingCOs = pendingCO;
-        _perProjectAggregates = perProject;
-        _projectsWithAwaitingApproval = awaitingIds;
-        _projectsWithPendingCOs = coIds;
-        _aggregatesLoaded = true;
+      // Only setState if values actually changed to prevent unnecessary rebuilds/flashing
+      final hasChanges = _totalMilestones != totalM ||
+          _completedMilestones != completedM ||
+          _awaitingApproval != awaitingM ||
+          _pendingCOs != pendingCO ||
+          !_aggregatesLoaded;
+
+      if (hasChanges) {
+        setState(() {
+          _totalMilestones = totalM;
+          _completedMilestones = completedM;
+          _awaitingApproval = awaitingM;
+          _pendingCOs = pendingCO;
+          _perProjectAggregates = perProject;
+          _projectsWithAwaitingApproval = awaitingIds;
+          _projectsWithPendingCOs = coIds;
+          _aggregatesLoaded = true;
+          _isLoadingAggregates = false;
+        });
+      } else {
+        // Values unchanged, just update loading flags without rebuilding UI
         _isLoadingAggregates = false;
-      });
+        _aggregatesLoaded = true;
+      }
     }
   }
 
@@ -1491,6 +1849,170 @@ class _ContractorProjectsScreenState
                   const SizedBox(height: 12),
 
                   // === SECTION B: Today's Crew ===
+                  // TEMPORARILY DISABLED - Feature causing type errors
+                  /* DISABLED
+                  // COMPREHENSIVE DEBUG CARD - Always visible
+                  Card(
+                    elevation: 2,
+                    color: Colors.blue[50],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.blue[200]!, width: 1),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.bug_report, color: Colors.blue[700], size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'System Diagnostic',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Colors.blue[900],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              TextButton.icon(
+                                onPressed: () async {
+                                  debugPrint('\n🔄 MANUAL RELOAD TRIGGERED\n');
+                                  await _loadTeamId();
+                                },
+                                icon: Icon(Icons.refresh, size: 18),
+                                label: Text('Reload All', style: TextStyle(fontSize: 12)),
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  backgroundColor: Colors.blue[100],
+                                  foregroundColor: Colors.blue[900],
+                                ),
+                              ),
+                            ],
+                          ),
+                          Divider(height: 20, color: Colors.blue[200]),
+
+                          // Team Status
+                          _buildDebugRow('🏢 Team ID', _teamId ?? 'NULL', _teamId != null ? Colors.green : Colors.red),
+                          _buildDebugRow('📅 Schedule Loaded', _scheduleLoaded.toString(), _scheduleLoaded ? Colors.green : Colors.orange),
+                          _buildDebugRow('👥 Today\'s Entries', '${_todaySchedule.length}', _todaySchedule.isNotEmpty ? Colors.green : Colors.orange),
+
+                          SizedBox(height: 12),
+
+                          // Current user info
+                          FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(FirebaseAuth.instance.currentUser!.uid)
+                                .get(),
+                            builder: (context, userSnap) {
+                              if (!userSnap.hasData) return SizedBox.shrink();
+
+                              try {
+                                final userData = userSnap.data?.data() as Map<String, dynamic>?;
+                                final userTeamIdRaw = userData?['team_id'];
+                                final userTeamId = userTeamIdRaw?.toString();
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'User Document:',
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue[900]),
+                                    ),
+                                    SizedBox(height: 4),
+                                    _buildDebugRow(
+                                      '  team_id field',
+                                      userTeamId ?? 'missing',
+                                      userTeamId != null ? Colors.green : Colors.red
+                                    ),
+                                    _buildDebugRow(
+                                      '  Match state?',
+                                      (userTeamId == _teamId).toString(),
+                                      userTeamId == _teamId ? Colors.green : Colors.red
+                                    ),
+                                  ],
+                                );
+                              } catch (e) {
+                                debugPrint('❌ Error rendering user debug info: $e');
+                                return SizedBox.shrink();
+                              }
+                            },
+                          ),
+
+                          SizedBox(height: 12),
+
+                          // Schedule path info
+                          if (_teamId != null) ...[
+                            Text(
+                              'Database Path:',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue[900]),
+                            ),
+                            SizedBox(height: 4),
+                            Container(
+                              padding: EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.blue[300]!),
+                              ),
+                              child: SelectableText(
+                                'teams/$_teamId/schedule_entries',
+                                style: TextStyle(fontSize: 10, fontFamily: 'monospace'),
+                              ),
+                            ),
+                          ],
+
+                          if (_todaySchedule.isEmpty && _scheduleLoaded) ...[
+                            SizedBox(height: 12),
+                            Container(
+                              padding: EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.orange[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.orange[300]!),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.warning, color: Colors.orange[700], size: 18),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'No schedule entries found for today.\nCheck logcat for detailed analysis.',
+                                      style: TextStyle(fontSize: 11, color: Colors.orange[900]),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          if (!_scheduleLoaded) ...[
+                            SizedBox(height: 12),
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue[700]),
+                                ),
+                                SizedBox(width: 8),
+                                Text('Loading schedule data...', style: TextStyle(fontSize: 11, color: Colors.blue[700])),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
                   if (_scheduleLoaded && _todaySchedule.isNotEmpty) ...[
                     _buildSectionHeader("Today's Crew"),
                     const SizedBox(height: 8),
@@ -1502,7 +2024,7 @@ class _ContractorProjectsScreenState
                         padding: const EdgeInsets.all(12),
                         child: Column(
                           children: _todaySchedule.map((entry) {
-                            final memberName = entry['member_name'] ?? entry['sub_name'] ?? 'Unknown';
+                            final memberName = entry['user_name'] ?? entry['sub_name'] ?? 'Unknown';
                             final projectName = entry['project_name'] ?? 'Unassigned';
                             final projectId = entry['project_id'] as String?;
                             final isSub = entry['type'] == 'sub';
@@ -1600,6 +2122,7 @@ class _ContractorProjectsScreenState
                         style: TextStyle(fontSize: 13, color: Colors.grey[500]),
                       ),
                     ),
+                  END DISABLED */
 
                   // === SECTION C: Summary Metrics ===
                   Row(
@@ -1753,7 +2276,32 @@ class _ContractorProjectsScreenState
                                 0) as num)
                         .toDouble();
 
-                    return Card(
+                    return StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('projects')
+                          .doc(doc.id)
+                          .collection('milestones')
+                          .orderBy('order')
+                          .snapshots(),
+                      builder: (context, milestonesSnapshot) {
+                        final milestones = milestonesSnapshot.hasData
+                            ? milestonesSnapshot.data!.docs
+                            : [];
+                        final totalCount = milestones.length;
+                        final completedCount = milestones
+                            .where((m) => (m.data() as Map)['status'] == 'approved')
+                            .length;
+
+                        return StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('projects')
+                              .doc(doc.id)
+                              .collection('updates')
+                              .snapshots(),
+                          builder: (context, photosSnapshot) {
+                            final photoCount = photosSnapshot.data?.docs.length ?? 0;
+
+                            return Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       elevation: 1,
                       shape: RoundedRectangleBorder(
@@ -1774,114 +2322,124 @@ class _ContractorProjectsScreenState
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 12),
-                          child: Row(
+                          child: Column(
                             children: [
-                              // Project name
-                              Expanded(
-                                flex: 3,
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      project['project_name'] ??
-                                          'Untitled',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14,
+                              Row(
+                                children: [
+                                  // Project name
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          project['project_name'] ??
+                                              'Untitled',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          project['client_name'] ??
+                                              'No client',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600]),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Cost
+                                  Text(
+                                    currencyFormat.format(cost),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                      color: Colors.grey[800],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Photo badge
+                                  if (photoCount > 0)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.purple.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
-                                      overflow: TextOverflow.ellipsis,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.photo_camera, size: 10, color: Colors.purple[700]),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            '$photoCount',
+                                            style: TextStyle(
+                                              color: Colors.purple[700],
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      project['client_name'] ??
-                                          'No client',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[600]),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.chevron_right,
+                                      size: 18, color: Colors.grey[400]),
+                                ],
                               ),
-                              // Cost
-                              Text(
-                                currencyFormat.format(cost),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                  color: Colors.grey[800],
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              // Status chip
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: status == 'active'
-                                      ? Colors.green.withOpacity(0.1)
-                                      : Colors.grey.withOpacity(0.1),
-                                  borderRadius:
-                                      BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  status == 'active'
-                                      ? 'Active'
-                                      : 'Done',
-                                  style: TextStyle(
-                                    color: status == 'active'
-                                        ? Colors.green[700]
-                                        : Colors.grey[600],
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                              // Segmented progress bar
+                              if (totalCount > 0) ...[
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Row(
+                                    children: [
+                                      for (var milestone in milestones)
+                                        Expanded(
+                                          child: Container(
+                                            height: 4,
+                                            color: () {
+                                              final status = (milestone.data() as Map)['status'];
+                                              if (status == 'approved') return Colors.green;
+                                              if (status == 'awaiting_approval') return Colors.orange;
+                                              if (status == 'in_progress') return Colors.blue;
+                                              return Colors.grey[300];
+                                            }(),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                              // Notification badges
-                              if (_aggregatesLoaded) ...[
-                                Builder(builder: (_) {
-                                  final agg = _perProjectAggregates[doc.id];
-                                  final aw = agg?['awaiting'] ?? 0;
-                                  final co = agg?['pendingCO'] ?? 0;
-                                  if (aw == 0 && co == 0) {
-                                    return const SizedBox(width: 4);
-                                  }
-                                  return Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const SizedBox(width: 6),
-                                      if (aw > 0)
-                                        Container(
-                                          width: 8, height: 8,
-                                          decoration: const BoxDecoration(
-                                            color: Colors.orange,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                      if (aw > 0 && co > 0)
-                                        const SizedBox(width: 3),
-                                      if (co > 0)
-                                        Container(
-                                          width: 8, height: 8,
-                                          decoration: BoxDecoration(
-                                            color: Colors.blue[600],
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                      const SizedBox(width: 4),
-                                    ],
-                                  );
-                                }),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Text(
+                                      '$completedCount/$totalCount',
+                                      style: TextStyle(fontSize: 10, color: Colors.grey[600], fontWeight: FontWeight.w500),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    if (photoCount > 0)
+                                      Text(
+                                        '• $photoCount photos',
+                                        style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                                      ),
+                                  ],
+                                ),
                               ],
-                              if (!_aggregatesLoaded)
-                                const SizedBox(width: 4),
-                              Icon(Icons.chevron_right,
-                                  size: 18, color: Colors.grey[400]),
                             ],
                           ),
                         ),
                       ),
+                    );
+                          },
+                        );
+                      },
                     );
                   }),
                   if (filtered.isEmpty && _searchQuery.isNotEmpty) ...[
@@ -1936,19 +2494,30 @@ class _ContractorProjectsScreenState
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
+      floatingActionButton: GestureDetector(
+        onLongPress: () {
+          // TEMPORARY: Long-press to open email preview tool
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const CreateProjectScreen(),
+              builder: (context) => const EmailPreviewScreen(),
             ),
           );
         },
-        icon: const Icon(Icons.add),
-        label: const Text('New Project'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
+        child: FloatingActionButton.extended(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const CreateProjectScreen(),
+              ),
+            );
+          },
+          icon: const Icon(Icons.add),
+          label: const Text('New Project'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          foregroundColor: Colors.white,
+        ),
       ),
     );
   }
@@ -2029,6 +2598,50 @@ class _ContractorProjectsScreenState
       style: const TextStyle(
         fontSize: 16,
         fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+
+  Widget _buildDebugRow(String label, String value, Color statusColor) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[900],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

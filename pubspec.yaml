@@ -67,6 +67,9 @@ dependencies:
   share_plus: ^10.1.2
   url_launcher: ^6.3.1
 
+  # Web view for email preview (TEMPORARY)
+  flutter_inappwebview: ^6.1.5
+
   # CSV generation & file system for time export
   csv: ^6.0.0
   path_provider: ^2.1.0
@@ -76,6 +79,8 @@ dependencies:
   # PDF generation for invoices
   pdf: ^3.11.1
   printing: ^5.13.3
+  flutter_local_notifications: ^20.1.0
+  emojis: ^0.9.9
 
 dev_dependencies:
   flutter_test:

@@ -109,11 +109,10 @@
             Someone invited you to join their team on ProjectPulse.
         </p>
         <a class="open-btn" id="open-app-btn" href="#">Open in App</a>
-        <a class="download-btn" id="download-btn"
-           href="https://play.google.com/store/apps/details?id=com.consciousapps.projectpulse">
-            Download ProjectPulse
-        </a>
-        <p class="footer">After installing, tap the link in your texts again to join automatically.</p>
+        <div class="download-btn" style="opacity: 0.6; cursor: not-allowed;">
+            Download ProjectPulse (Coming Soon)
+        </div>
+        <p class="footer">App is currently in beta testing. After launch, tap the link in your texts to join automatically.</p>
     </div>
 
     <script>
@@ -128,8 +127,17 @@
         // Determine invite type for messaging
         var isTeamInvite = path.includes('/join/team') && params.has('t');
         var messageEl = document.getElementById('invite-message');
+
+        // Try to extract project/contractor info from URL or show generic message
+        var projectId = path.split('/join/')[1]?.split('?')[0];
+        var contractorName = params.get('contractor') || 'your contractor';
+        var projectName = params.get('project') || 'a project';
+
         if (isTeamInvite) {
             messageEl.textContent = "You've been invited to join a team on ProjectPulse. Download the app to get started.";
+        } else if (projectId && projectId !== 'team') {
+            // Project invite with optional contractor/project names from URL params
+            messageEl.textContent = contractorName + " invited you to view '" + projectName + "' on ProjectPulse. Download the app to see real-time progress photos, milestones, and updates.";
         } else {
             messageEl.textContent = "You've been invited to view a project on ProjectPulse. Download the app to get started.";
         }

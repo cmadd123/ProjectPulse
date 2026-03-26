@@ -168,10 +168,41 @@ Count should include:
 
 ---
 
+## Pre-Launch Checklist
+
+### Code Quality & Security
+- [ ] **Comprehensive Code Review** (10-15 minutes)
+  - Notification system (Cloud Functions + Flutter service) - Security & reliability
+  - Authentication & permissions - Security vulnerabilities
+  - Bottom sheet forms - Consistency & UX
+  - Email templates & deep linking - Launch-critical paths
+  - Firestore security rules - Data protection
+  - Performance bottlenecks and optimizations
+  - Best practices and coding standards
+
+### Testing
+- [ ] Test full contractor → client update flow
+- [ ] **Re-test notification system end-to-end**
+  - Email notification delivery (SendGrid)
+  - Email links open correct pages
+  - Push notifications (both contractor and client receive)
+  - Push notification routing and display
+  - Debug logs show full notification pipeline
+- [ ] Test deep linking from emails (app.html and join.html)
+- [ ] Test all bottom sheet forms with keyboard (quality issue, addition request)
+
+### Deployment
+- [ ] Fix project card update count aggregation (requires finding client home screen)
+- [ ] Final security rules review
+- [ ] Remove debug tools screen before production
+- [ ] Update app store assets and descriptions
+
+---
+
 ## Next Session Priorities
 
 1. ~~Fix "Request Changes" button layout~~ ✅ DONE
 2. ~~Add tab notification badges~~ ✅ DONE
-3. Fix project card update count aggregation (requires finding client home screen)
-4. Test full contractor → client update flow
-5. Add Firebase Cloud Functions for actual push notifications (currently TODO)
+3. Perform comprehensive code review (pre-launch)
+4. Fix project card update count aggregation
+5. Test full contractor → client update flow

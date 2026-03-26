@@ -157,6 +157,15 @@ service cloud.firestore {
       // Anyone authenticated can create their initial profile
       allow create: if isAuthenticated() && request.auth.uid == userId;
 
+      // Contractors and team members can read client user profiles
+      // Clients can read contractor user profiles
+      // (needed to get FCM tokens for sending notifications)
+      allow read: if isAuthenticated() && (
+        resource.data.role == 'client' ||
+        resource.data.role == 'contractor' ||
+        resource.data.role == 'team_member'
+      );
+
       // Team owner (GC) can update team member's role
       allow update: if isAuthenticated() &&
         resource.data.role == 'team_member' &&
@@ -232,8 +241,13 @@ service cloud.firestore {
 
       // Updates (photo posts) subcollection
       match /updates/{updateId} {
-        // Owner and team members can create updates
+        // Owner, team members, and collaborators can create updates
         allow create: if isAuthenticated() && (
+          // Must be project owner, team member, foreman, or collaborator
+          isProjectOwner(projectId) ||
+          isTeamMemberForProject(projectId) ||
+          isForemanForProject(projectId)
+        ) && (
           // Ensure posted_by_ref matches current user
           request.resource.data.posted_by_ref == /databases/$(database)/documents/users/$(request.auth.uid)
         );
@@ -259,6 +273,29 @@ service cloud.firestore {
         allow update: if isProjectOwner(projectId) || isProjectClient(projectId);
 
         // Only owner can delete
+        allow delete: if isProjectOwner(projectId);
+      }
+
+      // Client changes subcollection (unified quality issues + addition requests)
+      match /client_changes/{changeId} {
+        // Clients can create (report quality issues or request additions)
+        allow create: if isProjectClient(projectId) &&
+                         request.resource.data.requested_by_ref == /databases/$(database)/documents/users/$(request.auth.uid) &&
+                         request.resource.data.keys().hasAll(['type', 'request_text', 'milestone_ref']) &&
+                         request.resource.data.type in ['quality_issue', 'addition_request'];
+
+        // Both client and contractor can read
+        allow read: if canAccessProject(projectId);
+
+        // Contractor can update (to respond/fix quality issues or quote/decline additions)
+        // Client can update (to approve/decline addition quotes)
+        allow update: if (isProjectOwner(projectId) || isProjectClient(projectId)) &&
+                         // Contractor updating: adding response
+                         (isProjectOwner(projectId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contractor_response', 'status', 'updated_at'])) ||
+                         // Client updating: approving/declining addition quote
+                         (isProjectClient(projectId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updated_at', 'change_order_ref']));
+
+        // Only contractor can delete
         allow delete: if isProjectOwner(projectId);
       }
 
@@ -323,16 +360,34 @@ service cloud.firestore {
         allow update: if isAuthenticated() &&
           resource.data.logged_by_uid == request.auth.uid;
       }
+
+      // Invoices subcollection (milestone payment invoices)
+      match /invoices/{invoiceId} {
+        // Owner and client can read invoices
+        allow read: if isProjectOwner(projectId) || isProjectClient(projectId);
+
+        // System (via milestone approval) can create invoices
+        allow create: if isAuthenticated();
+
+        // Only owner can update invoice status (mark as paid)
+        allow update: if isProjectOwner(projectId);
+
+        // No one can delete invoices (permanent record)
+        allow delete: if false;
+      }
     }
 
     // Notifications collection (for push notification queue)
     match /notifications/{notificationId} {
-      // Cloud Functions create notifications
+      // Authenticated users can create notifications (contractors, clients, team members)
       allow create: if isAuthenticated();
 
-      // Recipients can read their own notifications
-      allow read: if isAuthenticated() &&
+      // Recipients can read their own notifications (individual get)
+      allow get: if isAuthenticated() &&
         resource.data.recipient_ref == /databases/$(database)/documents/users/$(request.auth.uid);
+
+      // Allow users to list/query their own notifications (for log viewer)
+      allow list: if isAuthenticated();
 
       // Recipients can mark their own notifications as read
       allow update: if isAuthenticated() &&
