@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'subcontractor_detail_screen.dart';
+
+const _playStoreUrl = 'https://play.google.com/store/apps/details?id=com.consciousapps.projectpulse';
 
 class SubcontractorManagementScreen extends StatefulWidget {
   const SubcontractorManagementScreen({super.key});
@@ -33,6 +37,123 @@ class _SubcontractorManagementScreenState
   void initState() {
     super.initState();
     _loadTeamId();
+  }
+
+  void _showSubInviteDialog(String company, String contactName, String email) {
+    final user = FirebaseAuth.instance.currentUser;
+    String businessName = 'your team';
+
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(user?.uid)
+        .get()
+        .then((doc) {
+      final profile = doc.data()?['contractor_profile'] as Map<String, dynamic>?;
+      businessName = profile?['business_name'] ?? 'your team';
+    }).whenComplete(() {
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          contentPadding: EdgeInsets.zero,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green[100],
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.engineering, color: Colors.green[700], size: 32),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '$company Added!',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tell $contactName to download the app and sign in with $email',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          final message =
+                              'Hey $contactName! You\'ve been added to $businessName on ProjectPulse as a subcontractor. '
+                              'Download the app and sign in with $email to see your assigned projects.\n\n'
+                              '$_playStoreUrl';
+                          Share.share(message);
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(Icons.textsms),
+                        label: const Text('Send via Text'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final subject = Uri.encodeComponent('Join $businessName on ProjectPulse');
+                          final body = Uri.encodeComponent(
+                              'Hey $contactName!\n\n'
+                              'You\'ve been added to $businessName on ProjectPulse as a subcontractor. '
+                              'Download the app and sign in with $email to see your assigned projects.\n\n'
+                              '$_playStoreUrl\n\n'
+                              'See you on the job!');
+                          final mailtoUri = Uri.parse('mailto:$email?subject=$subject&body=$body');
+                          await launchUrl(mailtoUri);
+                          if (context.mounted) Navigator.pop(context);
+                        },
+                        icon: const Icon(Icons.email_outlined),
+                        label: Text('Email $contactName'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('Skip for Now', style: TextStyle(color: Colors.grey[500])),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
   }
 
   Future<void> _loadTeamId() async {
@@ -220,21 +341,48 @@ class _SubcontractorManagementScreenState
                               }
                               setSheetState(() => isSaving = true);
                               try {
-                                await FirebaseFirestore.instance
+                                final subRef = await FirebaseFirestore.instance
                                     .collection('teams')
                                     .doc(_teamId)
                                     .collection('subcontractors')
                                     .add({
                                   'company_name': companyController.text.trim(),
                                   'contact_name': contactController.text.trim(),
-                                  'email': emailController.text.trim(),
+                                  'email': emailController.text.trim().toLowerCase(),
                                   'phone': phoneController.text.trim(),
                                   'trade': selectedTrade,
                                   'status': 'active',
                                   'notes': notesController.text.trim(),
                                   'added_at': Timestamp.now(),
                                 });
-                                if (context.mounted) Navigator.pop(context, true);
+
+                                // Create pending invite lookup doc so sub auto-links on signup
+                                final normalizedEmail = emailController.text.trim().toLowerCase();
+                                if (normalizedEmail.isNotEmpty) {
+                                  await FirebaseFirestore.instance
+                                      .collection('pending_sub_invites')
+                                      .doc(normalizedEmail)
+                                      .set({
+                                    'team_id': _teamId,
+                                    'sub_id': subRef.id,
+                                    'company': companyController.text.trim(),
+                                    'contact_name': contactController.text.trim(),
+                                    'trade': selectedTrade,
+                                    'created_at': FieldValue.serverTimestamp(),
+                                  });
+                                }
+
+                                if (context.mounted) {
+                                  Navigator.pop(context, true);
+                                  // Show invite dialog
+                                  if (normalizedEmail.isNotEmpty) {
+                                    _showSubInviteDialog(
+                                      companyController.text.trim(),
+                                      contactController.text.trim(),
+                                      normalizedEmail,
+                                    );
+                                  }
+                                }
                               } catch (e) {
                                 setSheetState(() => isSaving = false);
                                 if (context.mounted) {

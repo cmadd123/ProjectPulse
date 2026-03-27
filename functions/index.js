@@ -476,6 +476,12 @@ exports.sendInvoiceEmail = onDocumentCreated(
     const projectId = event.params.projectId;
     const db = getFirestore();
 
+    // Skip if already emailed (prevents re-sends and test data spam)
+    if (invoiceData.emailed_at) {
+      console.log('Invoice already emailed, skipping');
+      return;
+    }
+
     try {
       // Get project data for client info
       const projectDoc = await db.collection('projects').doc(projectId).get();

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../utils/auth_utils.dart';
 import 'team_member_project_screen.dart';
 import '../contractor/schedule_screen.dart';
+import '../shared/notification_center_screen.dart';
 
 class TeamMemberHomeScreen extends StatelessWidget {
   const TeamMemberHomeScreen({super.key});
@@ -35,30 +36,53 @@ class TeamMemberHomeScreen extends StatelessWidget {
 
         if (teamId == null) {
           return Scaffold(
+            backgroundColor: Colors.grey[50],
             body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.group_off, size: 80, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No team linked',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.grey[600],
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.group_off, size: 40, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'No team linked yet',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ask your GC for an invite link to get started',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey[500], fontSize: 15),
+                    ),
+                    const SizedBox(height: 32),
+                    OutlinedButton.icon(
+                      onPressed: () => confirmLogout(context),
+                      icon: const Icon(Icons.logout, size: 18),
+                      label: const Text('Sign Out'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey[600],
+                        side: BorderSide(color: Colors.grey[300]!),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Ask your GC for an invite link',
-                    style: TextStyle(color: Colors.grey[500]),
-                  ),
-                  const SizedBox(height: 24),
-                  TextButton.icon(
-                    onPressed: () => confirmLogout(context),
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign Out'),
-                  ),
-                ],
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -74,7 +98,6 @@ class TeamMemberHomeScreen extends StatelessWidget {
                 .doc(teamMemberId)
                 .snapshots(),
             builder: (context, memberSnapshot) {
-              // Use member doc role, fall back to user doc role
               final memberData = memberSnapshot.data?.data()
                   as Map<String, dynamic>?;
               final liveRole =
@@ -95,7 +118,7 @@ class TeamMemberHomeScreen extends StatelessWidget {
                 });
               }
 
-              return _TeamMemberProjectsScreen(
+              return _TeamMemberDashboard(
                 teamId: teamId,
                 memberName: memberName,
                 teamRole: liveRole,
@@ -105,7 +128,7 @@ class TeamMemberHomeScreen extends StatelessWidget {
           );
         }
 
-        return _TeamMemberProjectsScreen(
+        return _TeamMemberDashboard(
           teamId: teamId,
           memberName: memberName,
           teamRole: userDocRole,
@@ -116,13 +139,17 @@ class TeamMemberHomeScreen extends StatelessWidget {
   }
 }
 
-class _TeamMemberProjectsScreen extends StatefulWidget {
+// =============================================================================
+// DESIGN 3 DASHBOARD
+// =============================================================================
+
+class _TeamMemberDashboard extends StatefulWidget {
   final String teamId;
   final String memberName;
   final String teamRole;
   final String userUid;
 
-  const _TeamMemberProjectsScreen({
+  const _TeamMemberDashboard({
     required this.teamId,
     required this.memberName,
     required this.teamRole,
@@ -130,16 +157,27 @@ class _TeamMemberProjectsScreen extends StatefulWidget {
   });
 
   @override
-  State<_TeamMemberProjectsScreen> createState() =>
-      _TeamMemberProjectsScreenState();
+  State<_TeamMemberDashboard> createState() => _TeamMemberDashboardState();
 }
 
-class _TeamMemberProjectsScreenState
-    extends State<_TeamMemberProjectsScreen> {
+class _TeamMemberDashboardState extends State<_TeamMemberDashboard> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String _statusFilter = 'all';
-  bool _scheduleExpanded = true;
+
+  // Action item counts
+  int _milestonesInProgress = 0;
+  int _milestonesAwaitingApproval = 0;
+  int _todayScheduleCount = 0;
+  List<Map<String, dynamic>> _todaySchedule = [];
+  bool _actionItemsLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActionItems();
+    _loadTodaySchedule();
+  }
 
   @override
   void dispose() {
@@ -151,8 +189,80 @@ class _TeamMemberProjectsScreenState
   String get memberName => widget.memberName;
   String get teamRole => widget.teamRole;
   String get userUid => widget.userUid;
+  bool get isForeman => teamRole == 'foreman' || teamRole == 'owner';
 
-  List<QueryDocumentSnapshot> _filterProjects(List<QueryDocumentSnapshot> docs) {
+  Future<void> _loadActionItems() async {
+    try {
+      // Get projects assigned to this member (or all team projects for foreman)
+      Query query;
+      if (isForeman) {
+        query = FirebaseFirestore.instance
+            .collection('projects')
+            .where('team_id', isEqualTo: teamId)
+            .where('status', isEqualTo: 'active');
+      } else {
+        query = FirebaseFirestore.instance
+            .collection('projects')
+            .where('assigned_member_uids', arrayContains: userUid)
+            .where('status', isEqualTo: 'active');
+      }
+
+      final projects = await query.get();
+      int inProgress = 0;
+      int awaitingApproval = 0;
+
+      for (final project in projects.docs) {
+        final milestones = await FirebaseFirestore.instance
+            .collection('projects')
+            .doc(project.id)
+            .collection('milestones')
+            .get();
+
+        for (final m in milestones.docs) {
+          final status = (m.data())['status'] as String? ?? 'pending';
+          if (status == 'in_progress') inProgress++;
+          if (status == 'awaiting_approval') awaitingApproval++;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _milestonesInProgress = inProgress;
+          _milestonesAwaitingApproval = awaitingApproval;
+          _actionItemsLoaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _actionItemsLoaded = true);
+    }
+  }
+
+  Future<void> _loadTodaySchedule() async {
+    try {
+      final now = DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
+
+      final snap = await FirebaseFirestore.instance
+          .collection('teams')
+          .doc(teamId)
+          .collection('schedule_entries')
+          .where('user_uid', isEqualTo: userUid)
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+          .where('date', isLessThan: Timestamp.fromDate(endOfDay))
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _todaySchedule = snap.docs.map((d) => d.data()).toList();
+          _todayScheduleCount = _todaySchedule.length;
+        });
+      }
+    } catch (_) {}
+  }
+
+  List<QueryDocumentSnapshot> _filterProjects(
+      List<QueryDocumentSnapshot> docs) {
     return docs.where((doc) {
       final project = doc.data() as Map<String, dynamic>;
       if (_statusFilter != 'all') {
@@ -161,8 +271,10 @@ class _TeamMemberProjectsScreenState
       }
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
-        final name = (project['project_name'] ?? '').toString().toLowerCase();
-        final client = (project['client_name'] ?? '').toString().toLowerCase();
+        final name =
+            (project['project_name'] ?? '').toString().toLowerCase();
+        final client =
+            (project['client_name'] ?? '').toString().toLowerCase();
         if (!name.contains(query) && !client.contains(query)) return false;
       }
       return true;
@@ -175,18 +287,17 @@ class _TeamMemberProjectsScreenState
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     if (diff.inDays < 7) return '${diff.inDays}d ago';
-    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()}w ago';
-    return '${diff.inDays}d ago';
+    return DateFormat('MMM d').format(date);
   }
 
   Color _roleColor() {
     switch (teamRole) {
       case 'foreman':
-        return Colors.blue;
+        return const Color(0xFF3B82F6);
       case 'owner':
-        return Colors.amber[700]!;
+        return const Color(0xFFD97706);
       default:
-        return Colors.green;
+        return const Color(0xFF10B981);
     }
   }
 
@@ -201,9 +312,21 @@ class _TeamMemberProjectsScreenState
     }
   }
 
+  String _roleEmoji() {
+    switch (teamRole) {
+      case 'foreman':
+        return '\u{1F477}'; // construction worker
+      case 'owner':
+        return '\u{1F451}'; // crown
+      default:
+        return '\u{1F528}'; // hammer
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance
@@ -217,10 +340,11 @@ class _TeamMemberProjectsScreenState
             return Text(teamName);
           },
         ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: const Color(0xFF2D3748),
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
-          if (teamRole == 'foreman')
+          if (isForeman)
             IconButton(
               icon: const Icon(Icons.calendar_month),
               tooltip: 'Crew Schedule',
@@ -230,6 +354,55 @@ class _TeamMemberProjectsScreenState
                     builder: (context) => const ScheduleScreen()),
               ),
             ),
+          // Notification bell with badge
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('notifications')
+                .where('recipient_uid', isEqualTo: userUid)
+                .where('read', isEqualTo: false)
+                .snapshots(),
+            builder: (context, snap) {
+              final count = snap.hasData ? snap.data!.docs.length : 0;
+              return IconButton(
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.notifications_outlined),
+                    if (count > 0)
+                      Positioned(
+                        right: -6,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFF6B35),
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 18,
+                            minHeight: 18,
+                          ),
+                          child: Text(
+                            count > 9 ? '9+' : '$count',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const NotificationCenterScreen()),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => confirmLogout(context),
@@ -238,74 +411,13 @@ class _TeamMemberProjectsScreenState
       ),
       body: Column(
         children: [
-          // Member info header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: _roleColor().withOpacity(0.15),
-                  child: Icon(
-                    teamRole == 'foreman'
-                        ? Icons.engineering
-                        : Icons.construction,
-                    color: _roleColor(),
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        memberName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _roleColor().withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          _roleLabel(),
-                          style: TextStyle(
-                            color: _roleColor(),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // Profile header card
+          _buildProfileHeader(context),
 
-          // Projects list (with schedule, search, chips as scrollable header)
-          // Foremen see ALL team projects; workers only see assigned ones
+          // Projects list with action items
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: teamRole == 'foreman'
+              stream: isForeman
                   ? FirebaseFirestore.instance
                       .collection('projects')
                       .where('team_id', isEqualTo: teamId)
@@ -313,7 +425,8 @@ class _TeamMemberProjectsScreenState
                       .snapshots()
                   : FirebaseFirestore.instance
                       .collection('projects')
-                      .where('assigned_member_uids', arrayContains: userUid)
+                      .where('assigned_member_uids',
+                          arrayContains: userUid)
                       .orderBy('created_at', descending: true)
                       .snapshots(),
               builder: (context, snapshot) {
@@ -323,55 +436,66 @@ class _TeamMemberProjectsScreenState
 
                 if (snapshot.hasError) {
                   return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline,
-                            size: 80, color: Colors.red[400]),
-                        const SizedBox(height: 16),
-                        Text('Error loading projects',
-                            style: TextStyle(color: Colors.red[600])),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text('${snapshot.error}',
-                              style: const TextStyle(fontSize: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.error_outline,
+                              size: 64, color: Colors.red[300]),
+                          const SizedBox(height: 16),
+                          Text('Error loading projects',
+                              style: TextStyle(
+                                  color: Colors.red[600], fontSize: 16)),
+                          const SizedBox(height: 8),
+                          Text('${snapshot.error}',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey[500]),
                               textAlign: TextAlign.center),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 }
 
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    padding: const EdgeInsets.all(16),
                     children: [
-                      // Collapsible schedule
-                      _buildScheduleSection(),
-                      const SizedBox(height: 32),
+                      _buildActionItemsSection(),
+                      _buildTodayScheduleSection(),
+                      const SizedBox(height: 40),
                       Center(
                         child: Column(
                           children: [
-                            Icon(Icons.work_outline,
-                                size: 80, color: Colors.grey[300]),
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.construction,
+                                  size: 40, color: Colors.grey[400]),
+                            ),
                             const SizedBox(height: 16),
                             Text(
                               'No projects yet',
                               style: TextStyle(
-                                fontSize: 22,
+                                fontSize: 20,
                                 fontWeight: FontWeight.w600,
                                 color: Colors.grey[700],
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 8),
                             Text(
-                              'Your GC will assign you to projects',
+                              isForeman
+                                  ? 'Projects assigned to your team will show up here'
+                                  : 'Your GC will assign you to projects',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 15,
                                 color: Colors.grey[500],
-                                height: 1.5,
                               ),
                             ),
                           ],
@@ -384,43 +508,64 @@ class _TeamMemberProjectsScreenState
                 final allDocs = snapshot.data!.docs;
                 final filtered = _filterProjects(allDocs);
 
-                // +1 for the header (schedule + search + chips)
                 return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  padding: const EdgeInsets.all(16),
                   itemCount: filtered.length + 1,
                   itemBuilder: (context, index) {
-                    // First item: schedule + search bar + filter chips
                     if (index == 0) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildScheduleSection(),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _searchController,
-                            decoration: InputDecoration(
-                              hintText: 'Search projects...',
-                              prefixIcon: const Icon(Icons.search, size: 20),
-                              suffixIcon: _searchQuery.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(Icons.clear, size: 20),
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        setState(() => _searchQuery = '');
-                                      },
-                                    )
-                                  : null,
-                              filled: true,
-                              fillColor: Colors.grey[100],
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                          _buildActionItemsSection(),
+                          _buildTodayScheduleSection(),
+                          const SizedBox(height: 12),
+
+                          // Search bar
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.04),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            onChanged: (value) => setState(() => _searchQuery = value),
+                            child: TextField(
+                              controller: _searchController,
+                              decoration: InputDecoration(
+                                hintText: 'Search projects...',
+                                hintStyle: TextStyle(color: Colors.grey[400]),
+                                prefixIcon: Icon(Icons.search,
+                                    size: 20, color: Colors.grey[400]),
+                                suffixIcon: _searchQuery.isNotEmpty
+                                    ? IconButton(
+                                        icon: Icon(Icons.clear,
+                                            size: 18, color: Colors.grey[400]),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          setState(() => _searchQuery = '');
+                                        },
+                                      )
+                                    : null,
+                                filled: true,
+                                fillColor: Colors.white,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 0),
+                              ),
+                              onChanged: (value) =>
+                                  setState(() => _searchQuery = value),
+                            ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 10),
+
+                          // Filter chips
                           Row(
                             children: [
                               for (final filter in [
@@ -433,15 +578,16 @@ class _TeamMemberProjectsScreenState
                                   selected: _statusFilter == filter['key'],
                                   onSelected: (selected) {
                                     if (selected) {
-                                      setState(() => _statusFilter = filter['key']!);
+                                      setState(() =>
+                                          _statusFilter = filter['key']!);
                                     }
                                   },
-                                  selectedColor:
-                                      Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                                  selectedColor: const Color(0xFF2D3748)
+                                      .withOpacity(0.12),
                                   labelStyle: TextStyle(
                                     fontSize: 13,
                                     color: _statusFilter == filter['key']
-                                        ? Theme.of(context).colorScheme.primary
+                                        ? const Color(0xFF2D3748)
                                         : Colors.grey[600],
                                     fontWeight: _statusFilter == filter['key']
                                         ? FontWeight.w600
@@ -456,12 +602,14 @@ class _TeamMemberProjectsScreenState
                               ],
                             ],
                           ),
-                          if (_searchQuery.isNotEmpty || _statusFilter != 'all')
+                          if (_searchQuery.isNotEmpty ||
+                              _statusFilter != 'all')
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
                               child: Text(
                                 '${filtered.length} of ${allDocs.length} projects',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey[500]),
                               ),
                             ),
                           if (filtered.isEmpty) ...[
@@ -469,11 +617,13 @@ class _TeamMemberProjectsScreenState
                             Center(
                               child: Column(
                                 children: [
-                                  Icon(Icons.search_off, size: 60, color: Colors.grey[400]),
+                                  Icon(Icons.search_off,
+                                      size: 48, color: Colors.grey[300]),
                                   const SizedBox(height: 12),
                                   Text(
                                     'No projects match your search',
-                                    style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                                    style: TextStyle(
+                                        color: Colors.grey[600], fontSize: 15),
                                   ),
                                   const SizedBox(height: 8),
                                   TextButton(
@@ -490,231 +640,14 @@ class _TeamMemberProjectsScreenState
                               ),
                             ),
                           ],
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
                         ],
                       );
                     }
 
                     final doc = filtered[index - 1];
                     final project = doc.data() as Map<String, dynamic>;
-                    final status = project['status'] ?? 'active';
-                    final crewCount = ((project['assigned_member_uids'] as List?)?.length ?? 0);
-                    final subCount = ((project['assigned_sub_ids'] as List?)?.length ?? 0);
-
-                    // Get milestone progress via stream
-                    return StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('projects')
-                          .doc(doc.id)
-                          .collection('milestones')
-                          .orderBy('order')
-                          .snapshots(),
-                      builder: (context, milestonesSnapshot) {
-                        final milestones = milestonesSnapshot.hasData
-                            ? milestonesSnapshot.data!.docs
-                            : [];
-                        final completedCount = milestones
-                            .where((m) =>
-                                (m.data() as Map)['status'] == 'approved')
-                            .length;
-                        final totalCount = milestones.length;
-                        final progress = totalCount > 0
-                            ? completedCount / totalCount
-                            : 0.0;
-
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          elevation: 3,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      TeamMemberProjectScreen(
-                                    projectId: doc.id,
-                                    projectData: project,
-                                    teamRole: teamRole,
-                                  ),
-                                ),
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Gradient header
-                                Container(
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        Theme.of(context).colorScheme.primary,
-                                        Theme.of(context)
-                                            .colorScheme
-                                            .secondary,
-                                      ],
-                                    ),
-                                    borderRadius: const BorderRadius.vertical(
-                                        top: Radius.circular(16)),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              project['project_name'] ??
-                                                  'Untitled Project',
-                                              style: const TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ),
-                                          if (totalCount > 0)
-                                            Text(
-                                              '${(progress * 100).toStringAsFixed(0)}%',
-                                              style: const TextStyle(
-                                                fontSize: 24,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        children: [
-                                          Icon(Icons.person_outline, size: 14,
-                                              color: Colors.white.withOpacity(0.9)),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            project['client_name'] ?? 'No client',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.white.withOpacity(0.9),
-                                            ),
-                                          ),
-                                          if (crewCount > 0) ...[
-                                            const SizedBox(width: 12),
-                                            Icon(Icons.groups, size: 14,
-                                                color: Colors.white.withOpacity(0.9)),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '$crewCount crew',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.white.withOpacity(0.9),
-                                              ),
-                                            ),
-                                          ],
-                                          if (subCount > 0) ...[
-                                            const SizedBox(width: 12),
-                                            Icon(Icons.engineering, size: 14,
-                                                color: Colors.white.withOpacity(0.9)),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '$subCount sub${subCount == 1 ? '' : 's'}',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.white.withOpacity(0.9),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                      if (totalCount > 0) ...[
-                                        const SizedBox(height: 12),
-                                        ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                          child: LinearProgressIndicator(
-                                            value: progress,
-                                            minHeight: 6,
-                                            backgroundColor:
-                                                Colors.white.withOpacity(0.3),
-                                            valueColor:
-                                                const AlwaysStoppedAnimation<
-                                                    Color>(Colors.white),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          '$completedCount of $totalCount milestones',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.white
-                                                .withOpacity(0.9),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                // Bottom section with status + current milestone
-                                Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: status == 'active'
-                                              ? Colors.green.withOpacity(0.1)
-                                              : Colors.grey.withOpacity(0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          status == 'active'
-                                              ? 'Active'
-                                              : 'Completed',
-                                          style: TextStyle(
-                                            color: status == 'active'
-                                                ? Colors.green[700]
-                                                : Colors.grey[600],
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      if (project['updated_at'] != null) ...[
-                                        Icon(Icons.access_time, size: 12, color: Colors.grey[400]),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          _formatTimeAgo((project['updated_at'] as Timestamp).toDate()),
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey[500],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                      ],
-                                      Icon(
-                                        Icons.arrow_forward_ios,
-                                        size: 16,
-                                        color: Colors.grey[400],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
+                    return _buildProjectCard(context, doc.id, project);
                   },
                 );
               },
@@ -725,291 +658,672 @@ class _TeamMemberProjectsScreenState
     );
   }
 
-  Widget _buildScheduleSection() {
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: () => setState(() => _scheduleExpanded = !_scheduleExpanded),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
+  // ---------------------------------------------------------------------------
+  // Profile header — Design 3 white card with shadow
+  // ---------------------------------------------------------------------------
+  Widget _buildProfileHeader(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: _roleColor().withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              _roleEmoji(),
+              style: const TextStyle(fontSize: 22),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 6),
                 Text(
-                  'My Schedule',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[700],
+                  memberName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Color(0xFF2D3748),
                   ),
                 ),
-                const SizedBox(width: 4),
-                Icon(
-                  _scheduleExpanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
-                  size: 20,
-                  color: Colors.grey[500],
+                const SizedBox(height: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _roleColor().withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _roleLabel(),
+                    style: TextStyle(
+                      color: _roleColor(),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-        ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          child: _scheduleExpanded
-              ? _WeekScheduleStrip(teamId: teamId, userUid: userUid)
-              : const SizedBox.shrink(),
-        ),
-      ],
+        ],
+      ),
     );
   }
-}
 
-/// Personal week schedule strip — shows this worker's assignments Mon-Fri
-class _WeekScheduleStrip extends StatefulWidget {
-  final String teamId;
-  final String userUid;
+  // ---------------------------------------------------------------------------
+  // Action items section — Design 3 style
+  // ---------------------------------------------------------------------------
+  Widget _buildActionItemsSection() {
+    if (!_actionItemsLoaded) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 12),
+        child: SizedBox(height: 48),
+      );
+    }
 
-  const _WeekScheduleStrip({required this.teamId, required this.userUid});
+    final hasItems = _milestonesInProgress > 0 || _milestonesAwaitingApproval > 0;
 
-  @override
-  State<_WeekScheduleStrip> createState() => _WeekScheduleStripState();
-}
+    if (!hasItems) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.check_circle, color: Colors.green[600], size: 20),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'All caught up! No action items right now.',
+              style: TextStyle(
+                color: Colors.green[800],
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
-class _WeekScheduleStripState extends State<_WeekScheduleStrip> {
-  late DateTime _weekStart;
-
-  static const _projectColors = [
-    Color(0xFF2196F3),
-    Color(0xFF4CAF50),
-    Color(0xFFFF9800),
-    Color(0xFF9C27B0),
-    Color(0xFF009688),
-    Color(0xFFE91E63),
-    Color(0xFF3F51B5),
-    Color(0xFFFF5722),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    final now = DateTime.now();
-    _weekStart = DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: now.weekday - 1));
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Needs Your Attention',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2D3748),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_milestonesInProgress > 0)
+            _buildActionItem(
+              emoji: '\u{1F528}',
+              color: const Color(0xFF3B82F6),
+              text:
+                  '$_milestonesInProgress milestone${_milestonesInProgress == 1 ? '' : 's'} in progress',
+              subtitle: isForeman
+                  ? 'Mark complete when work is done'
+                  : 'Post photo updates to keep the client informed',
+            ),
+          if (_milestonesAwaitingApproval > 0) ...[
+            if (_milestonesInProgress > 0) const SizedBox(height: 10),
+            _buildActionItem(
+              emoji: '\u{23F3}',
+              color: const Color(0xFFF59E0B),
+              text:
+                  '$_milestonesAwaitingApproval milestone${_milestonesAwaitingApproval == 1 ? '' : 's'} awaiting client approval',
+              subtitle: 'Waiting on the client to review and approve',
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
-  Color _projectColor(String projectId) {
-    return _projectColors[projectId.hashCode.abs() % _projectColors.length];
+  Widget _buildActionItem({
+    required String emoji,
+    required Color color,
+    required String text,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 24)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  text,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: color.withOpacity(1),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  List<DateTime> get _weekDays =>
-      List.generate(5, (i) => _weekStart.add(Duration(days: i)));
+  // ---------------------------------------------------------------------------
+  // Today's schedule section
+  // ---------------------------------------------------------------------------
+  Widget _buildTodayScheduleSection() {
+    if (_todaySchedule.isEmpty) return const SizedBox.shrink();
 
-  void _shiftWeek(int direction) {
-    setState(() {
-      _weekStart = _weekStart.add(Duration(days: 7 * direction));
-    });
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('\u{1F4C5}', style: TextStyle(fontSize: 18)),
+              const SizedBox(width: 8),
+              const Text(
+                "Today's Schedule",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2D3748),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                DateFormat('EEE, MMM d').format(DateTime.now()),
+                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ..._todaySchedule.map((entry) {
+            final projectName =
+                entry['project_name'] as String? ?? 'Unknown Project';
+            final projHash = projectName.hashCode.abs();
+            final colors = [
+              const Color(0xFF3B82F6),
+              const Color(0xFF10B981),
+              const Color(0xFFF59E0B),
+              const Color(0xFF8B5CF6),
+              const Color(0xFF14B8A6),
+            ];
+            final color = colors[projHash % colors.length];
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: color.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      projectName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward_ios, size: 14, color: color.withOpacity(0.5)),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
   }
 
-  bool get _isCurrentWeek {
-    final now = DateTime.now();
-    final currentWeekStart = DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: now.weekday - 1));
-    return _weekStart.isAtSameMomentAs(currentWeekStart);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final weekEnd = _weekStart.add(const Duration(days: 4));
-    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  // ---------------------------------------------------------------------------
+  // Project card — GC-style with role-appropriate details
+  //
+  // GC sees: dollar amounts, pending COs from client, photo count
+  // Foreman sees: milestone status (no $), crew on project today, what needs doing
+  // Worker sees: milestone status (no $), what's active, post updates prompt
+  // ---------------------------------------------------------------------------
+  Widget _buildProjectCard(
+      BuildContext context, String projectId, Map<String, dynamic> project) {
+    final status = project['status'] ?? 'active';
+    final crewCount =
+        ((project['assigned_member_uids'] as List?)?.length ?? 0);
+    final subCount = ((project['assigned_sub_ids'] as List?)?.length ?? 0);
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('teams')
-          .doc(widget.teamId)
-          .collection('schedule_entries')
-          .where('user_uid', isEqualTo: widget.userUid)
+          .collection('projects')
+          .doc(projectId)
+          .collection('milestones')
+          .orderBy('order')
           .snapshots(),
-      builder: (context, snap) {
-        final Map<int, List<Map<String, dynamic>>> entriesByDay = {};
-        if (snap.hasData) {
-          for (final doc in snap.data!.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            final date = (data['date'] as Timestamp?)?.toDate();
-            if (date == null) continue;
-            final normalized = DateTime(date.year, date.month, date.day);
-            for (int i = 0; i < 5; i++) {
-              if (normalized.isAtSameMomentAs(_weekDays[i])) {
-                entriesByDay.putIfAbsent(i, () => []);
-                entriesByDay[i]!.add(data);
-                break;
-              }
-            }
-          }
-        }
-
-        final weekLabel =
-            '${DateFormat('MMM d').format(_weekStart)} – ${DateFormat('MMM d').format(weekEnd)}';
+      builder: (context, milestonesSnapshot) {
+        final milestones =
+            milestonesSnapshot.hasData ? milestonesSnapshot.data!.docs : [];
+        final completedCount = milestones
+            .where((m) => (m.data() as Map)['status'] == 'approved')
+            .length;
+        final totalCount = milestones.length;
+        final progress =
+            totalCount > 0 ? completedCount / totalCount : 0.0;
 
         return Container(
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          child: Column(
-            children: [
-              // Week header with navigation
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => _shiftWeek(-1),
-                      child: Icon(Icons.chevron_left,
-                          size: 22, color: Colors.grey[600]),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TeamMemberProjectScreen(
+                      projectId: projectId,
+                      projectData: project,
+                      teamRole: teamRole,
                     ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: _isCurrentWeek
-                            ? null
-                            : () {
-                                final n = DateTime.now();
-                                setState(() {
-                                  _weekStart = DateTime(n.year, n.month, n.day)
-                                      .subtract(
-                                          Duration(days: n.weekday - 1));
-                                });
-                              },
-                        child: Text(
-                          _isCurrentWeek ? 'This Week' : weekLabel,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => _shiftWeek(1),
-                      child: Icon(Icons.chevron_right,
-                          size: 22, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-              // Day columns
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
-                child: Row(
-                  children: List.generate(5, (i) {
-                    final day = _weekDays[i];
-                    final isToday = day.isAtSameMomentAs(today);
-                    final entries = entriesByDay[i] ?? [];
-
-                    return Expanded(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                        child: Column(
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header — Design 3: white card, no gradient
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Text(
-                              dayNames[i],
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isToday
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Colors.grey[500],
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Container(
-                              width: 26,
-                              height: 26,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isToday
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Colors.transparent,
-                              ),
-                              alignment: Alignment.center,
+                            Expanded(
                               child: Text(
-                                '${day.day}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight:
-                                      isToday ? FontWeight.bold : FontWeight.w500,
-                                  color: isToday ? Colors.white : Colors.grey[700],
+                                project['project_name'] ?? 'Untitled Project',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF2D3748),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Container(
-                              height: 40,
-                              alignment: Alignment.topCenter,
-                              child: entries.isEmpty
-                                  ? Text('—',
-                                      style: TextStyle(
-                                          color: Colors.grey[300], fontSize: 16))
-                                  : Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: entries.take(2).map((entry) {
-                                        final projectId =
-                                            entry['project_id'] as String? ?? '';
-                                        final projectName =
-                                            entry['project_name'] as String? ??
-                                                '?';
-                                        final color = _projectColor(projectId);
-                                        return Container(
-                                          width: double.infinity,
-                                          margin:
-                                              const EdgeInsets.only(bottom: 2),
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 2, horizontal: 2),
-                                          decoration: BoxDecoration(
-                                            color: color.withOpacity(0.15),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            projectName.length > 6
-                                                ? '${projectName.substring(0, 6)}…'
-                                                : projectName,
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w600,
-                                              color: color,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.clip,
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
-                            ),
+                            if (totalCount > 0)
+                              Text(
+                                '${(progress * 100).toStringAsFixed(0)}%',
+                                style: TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.bold,
+                                  color: progress >= 1.0
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFF2D3748),
+                                ),
+                              ),
                           ],
                         ),
+                        const SizedBox(height: 6),
+                        // Foreman: crew + subs. Worker: client name.
+                        Row(
+                          children: [
+                            if (isForeman) ...[
+                              Icon(Icons.groups,
+                                  size: 14, color: Colors.grey[500]),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$crewCount crew',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              if (subCount > 0) ...[
+                                const SizedBox(width: 12),
+                                Icon(Icons.engineering,
+                                    size: 14, color: Colors.grey[500]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '$subCount sub${subCount == 1 ? '' : 's'}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ] else ...[
+                              Icon(Icons.person_outline,
+                                  size: 14, color: Colors.grey[500]),
+                              const SizedBox(width: 4),
+                              Text(
+                                project['client_name'] ?? 'No client',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (totalCount > 0) ...[
+                          const SizedBox(height: 14),
+                          // Segmented progress bar — each milestone colored by status
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: SizedBox(
+                              height: 6,
+                              child: Row(
+                                children: milestones.asMap().entries.map((entry) {
+                                  final i = entry.key;
+                                  final mData = entry.value.data() as Map<String, dynamic>;
+                                  final mStatus = mData['status'] as String? ?? 'pending';
+                                  Color color;
+                                  switch (mStatus) {
+                                    case 'approved':
+                                      color = const Color(0xFF10B981);
+                                      break;
+                                    case 'in_progress':
+                                      color = const Color(0xFF3B82F6);
+                                      break;
+                                    case 'awaiting_approval':
+                                      color = const Color(0xFFF59E0B);
+                                      break;
+                                    default:
+                                      color = Colors.grey[300]!;
+                                  }
+                                  return Expanded(
+                                    child: Container(
+                                      margin: EdgeInsets.only(
+                                          right: i < totalCount - 1 ? 2 : 0),
+                                      color: color,
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '$completedCount of $totalCount milestones complete',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Divider(height: 1, color: Colors.grey[200]),
+                      ],
+                    ),
+                  ),
+
+                  // Milestone preview list — NO dollar amounts
+                  if (milestones.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ...milestones.take(3).map((milestoneDoc) {
+                            final milestone =
+                                milestoneDoc.data() as Map<String, dynamic>;
+                            final mStatus = milestone['status'] as String? ?? 'pending';
+                            final isCompleted = mStatus == 'approved';
+                            final isActive = mStatus == 'in_progress' ||
+                                mStatus == 'awaiting_approval';
+
+                            Color statusColor = Colors.grey;
+                            if (isCompleted) {
+                              statusColor = const Color(0xFF10B981);
+                            } else if (mStatus == 'awaiting_approval') {
+                              statusColor = const Color(0xFFF59E0B);
+                            } else if (mStatus == 'in_progress') {
+                              statusColor = const Color(0xFF3B82F6);
+                            }
+
+                            // Foreman sees actionable hints; worker sees status
+                            String? trailingText;
+                            if (isForeman) {
+                              if (mStatus == 'in_progress') {
+                                trailingText = 'Mark done';
+                              } else if (mStatus == 'pending' || mStatus == 'not_started') {
+                                trailingText = 'Start';
+                              } else if (mStatus == 'awaiting_approval') {
+                                trailingText = 'With client';
+                              }
+                            } else {
+                              // Worker
+                              if (mStatus == 'in_progress') {
+                                trailingText = 'Post update';
+                              } else if (mStatus == 'awaiting_approval') {
+                                trailingText = 'With client';
+                              }
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Row(
+                                children: [
+                                  // Status dot — same as GC card
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: isCompleted
+                                          ? statusColor
+                                          : Colors.white,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: statusColor, width: 2),
+                                    ),
+                                    child: isCompleted
+                                        ? const Icon(Icons.check,
+                                            size: 14, color: Colors.white)
+                                        : (isActive
+                                            ? Center(
+                                                child: Container(
+                                                  width: 10,
+                                                  height: 10,
+                                                  decoration: BoxDecoration(
+                                                    color: statusColor,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                ),
+                                              )
+                                            : null),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      milestone['name'] ?? 'Untitled',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: isActive
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                        color: isCompleted
+                                            ? Colors.grey[500]
+                                            : const Color(0xFF2D3748),
+                                        decoration: isCompleted
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (trailingText != null)
+                                    Text(
+                                      trailingText,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: statusColor,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          }),
+                          if (milestones.length > 3) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              '+${milestones.length - 3} more milestones',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
+                          // Bottom activity row
+                          Row(
+                            children: [
+                              // Foreman: show crew count for today
+                              if (isForeman) ...[
+                                Icon(Icons.groups_outlined,
+                                    size: 18, color: Colors.grey[600]),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '$crewCount assigned',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ] else ...[
+                                // Worker: show update time
+                                Icon(Icons.access_time,
+                                    size: 16, color: Colors.grey[500]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  project['updated_at'] != null
+                                      ? _formatTimeAgo(
+                                          (project['updated_at'] as Timestamp)
+                                              .toDate())
+                                      : 'No activity',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[500],
+                                  ),
+                                ),
+                              ],
+                              const Spacer(),
+                              Icon(
+                                Icons.arrow_forward,
+                                size: 20,
+                                color: const Color(0xFFFF6B35),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    );
-                  }),
-                ),
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       },

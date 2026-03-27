@@ -38,9 +38,95 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
   bool _expanded = false;
   bool _switching = false;
 
+  /// Temporarily switch current user to worker/foreman view
+  Future<void> _switchToTeamRole(BuildContext ctx, String teamRole) async {
+    setState(() => _switching = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final userDoc = await userRef.get();
+      final userData = userDoc.data() ?? {};
+      final teamId = userData['team_id'] as String?;
+
+      if (teamId == null) {
+        if (ctx.mounted) {
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            const SnackBar(content: Text('No team found'), backgroundColor: Colors.red));
+        }
+        setState(() => _switching = false);
+        return;
+      }
+
+      // Save original role so we can restore it
+      final originalRole = userData['role'] as String?;
+      if (originalRole != 'team_member') {
+        await userRef.update({'_original_role': originalRole});
+      }
+
+      // Find a test member doc to link to (pick the first matching role)
+      final membersSnap = await FirebaseFirestore.instance
+          .collection('teams')
+          .doc(teamId)
+          .collection('members')
+          .where('role', isEqualTo: teamRole)
+          .get();
+
+      String memberId = 'test_member';
+      String memberName = teamRole == 'foreman' ? 'Mike Johnson' : 'Carlos Rivera';
+      if (membersSnap.docs.isNotEmpty) {
+        memberId = membersSnap.docs.first.id;
+        memberName = membersSnap.docs.first.data()['name'] as String? ?? memberName;
+      }
+
+      // Update user doc to team_member role
+      await userRef.update({
+        'role': 'team_member',
+        'team_member_id': memberId,
+        'team_member_profile': {
+          'name': memberName,
+          'team_role': teamRole,
+        },
+      });
+
+      // Force reload by signing out and back in
+      final email = user.email!;
+      // Find the password from dev accounts
+      final pass = _devAccounts.firstWhere(
+        (a) => a['email'] == email,
+        orElse: () => {'pass': 'Proverbs163'},
+      )['pass'] as String;
+
+      await FirebaseAuth.instance.signOut();
+      await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: pass);
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+    if (mounted) setState(() => _switching = false);
+  }
+
   Future<void> _switchAccount(String email, String pass) async {
     setState(() => _switching = true);
     try {
+      // Restore original role if we were in worker/foreman preview
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        final userRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
+        final userDoc = await userRef.get();
+        final originalRole = userDoc.data()?['_original_role'] as String?;
+        if (originalRole != null) {
+          await userRef.update({
+            'role': originalRole,
+            '_original_role': FieldValue.delete(),
+            'team_member_id': FieldValue.delete(),
+            'team_member_profile': FieldValue.delete(),
+          });
+        }
+      }
       devRoleOverride = null;
       await FirebaseAuth.instance.signOut();
       await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: pass);
@@ -199,6 +285,7 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
             'pdf_url': null,
             'created_at': m['approved_at'],
             'paid_at': m['order'] == 0 ? Timestamp.fromDate(now.subtract(const Duration(days: 12))) : null,
+            'emailed_at': Timestamp.now(), // Prevent Cloud Function from sending test emails
           });
         }
       }
@@ -561,11 +648,14 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
                       Row(
                         children: _devAccounts.map((acct) {
                           final isCurrent = currentEmail == acct['email'];
+                          // Always allow switching if we're in team_member preview mode
+                          final inPreviewMode = widget.firestoreRole == 'team_member';
+                          final isClickable = !isCurrent || inPreviewMode;
                           return Expanded(
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 2),
                               child: GestureDetector(
-                                onTap: isCurrent ? null : () => _switchAccount(acct['email'] as String, acct['pass'] as String),
+                                onTap: isClickable ? () => _switchAccount(acct['email'] as String, acct['pass'] as String) : null,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 8),
                                   decoration: BoxDecoration(
@@ -704,6 +794,51 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
                             ],
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 6),
+                      // Worker/Foreman view buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: _switching ? null : () => _switchToTeamRole(context, 'worker'),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.construction, color: Colors.green[300], size: 18),
+                                    const SizedBox(height: 2),
+                                    Text('Worker', style: TextStyle(color: Colors.green[300], fontWeight: FontWeight.bold, fontSize: 10)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: _switching ? null : () => _switchToTeamRole(context, 'foreman'),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.engineering, color: Colors.amber[300], size: 18),
+                                    const SizedBox(height: 2),
+                                    Text('Foreman', style: TextStyle(color: Colors.amber[300], fontWeight: FontWeight.bold, fontSize: 10)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 10),
 

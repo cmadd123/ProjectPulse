@@ -14,6 +14,8 @@ class ProjectChatDesign3 extends StatefulWidget {
   final String projectName;
   final bool isContractor;
   final bool embedded;
+  final String? emptyStateHint; // Override empty state text
+  final String? inputHint; // Override input placeholder
 
   const ProjectChatDesign3({
     super.key,
@@ -21,6 +23,8 @@ class ProjectChatDesign3 extends StatefulWidget {
     required this.projectName,
     required this.isContractor,
     this.embedded = false,
+    this.emptyStateHint,
+    this.inputHint,
   });
 
   @override
@@ -151,9 +155,10 @@ class _ProjectChatDesign3State extends State<ProjectChatDesign3> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            widget.isContractor
-                                ? 'Send a message to your client'
-                                : 'Send a message to your contractor',
+                            widget.emptyStateHint ??
+                                (widget.isContractor
+                                    ? 'Send a message to your client'
+                                    : 'Send a message to your contractor'),
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[500],
@@ -232,9 +237,10 @@ class _ProjectChatDesign3State extends State<ProjectChatDesign3> {
                       maxLines: null,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
-                        hintText: widget.isContractor
-                            ? 'Send an update...'
-                            : 'Ask a question...',
+                        hintText: widget.inputHint ??
+                            (widget.isContractor
+                                ? 'Send an update...'
+                                : 'Ask a question...'),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide(color: Colors.grey[300]!),

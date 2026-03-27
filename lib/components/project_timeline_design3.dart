@@ -58,9 +58,10 @@ import 'change_type_selector_bottom_sheet.dart';
 class ProjectTimelineDesign3 extends StatelessWidget {
   final String projectId;
   final Map<String, dynamic> projectData;
-  final String userRole; // "contractor" or "client"
+  final String userRole; // "contractor", "client", or "team_member"
   final bool showProgressHeader; // Show progress bar at top
   final bool isPreview; // Preview mode (contractor viewing as client) - disables actions
+  final bool showAmounts; // Show dollar amounts on milestones (false for foreman/worker)
   final Function(String milestoneId, String milestoneName)? onAddPhotoUpdate; // Callback for photo upload
 
   const ProjectTimelineDesign3({
@@ -70,6 +71,7 @@ class ProjectTimelineDesign3 extends StatelessWidget {
     required this.userRole,
     this.showProgressHeader = true,
     this.isPreview = false,
+    this.showAmounts = true,
     this.onAddPhotoUpdate,
   });
 
@@ -376,10 +378,156 @@ class ProjectTimelineDesign3 extends StatelessWidget {
     }
   }
 
+  /// Segmented progress bar — each milestone is a segment colored by status
+  Widget _buildSegmentedBar(List<MilestoneRecord> milestones, {bool darkMode = false}) {
+    if (milestones.isEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: LinearProgressIndicator(
+          value: 0,
+          minHeight: darkMode ? 12 : 8,
+          backgroundColor: darkMode ? Colors.white.withOpacity(0.2) : Colors.grey[200],
+          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF6B35)),
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        height: darkMode ? 12 : 8,
+        child: Row(
+          children: milestones.asMap().entries.map((entry) {
+            final i = entry.key;
+            final m = entry.value;
+            Color color;
+            switch (m.status) {
+              case 'approved':
+                color = const Color(0xFF10B981); // green
+                break;
+              case 'in_progress':
+                color = const Color(0xFF3B82F6); // blue
+                break;
+              case 'awaiting_approval':
+                color = const Color(0xFFF59E0B); // orange
+                break;
+              default:
+                color = darkMode ? Colors.white.withOpacity(0.15) : Colors.grey[300]!;
+            }
+
+            return Expanded(
+              child: Container(
+                margin: EdgeInsets.only(right: i < milestones.length - 1 ? 2 : 0),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.horizontal(
+                    left: i == 0 ? const Radius.circular(8) : Radius.zero,
+                    right: i == milestones.length - 1 ? const Radius.circular(8) : Radius.zero,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+      ],
+    );
+  }
+
   Widget _buildProgressBar(List<MilestoneRecord> milestones) {
     final completedCount = milestones.where((m) => m.status == 'approved').length;
     final totalCount = milestones.length;
     final progress = totalCount > 0 ? completedCount / totalCount : 0.0;
+
+    // Design 3 white-card style for team members; dark style for GC/client
+    if (!showAmounts) {
+      return Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Project Phases',
+                  style: TextStyle(
+                    color: Color(0xFF2D3748),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  '${(progress * 100).toStringAsFixed(0)}%',
+                  style: TextStyle(
+                    color: progress >= 1.0
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFF2D3748),
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$completedCount of $totalCount milestones complete',
+              style: TextStyle(color: Colors.grey[500], fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            _buildSegmentedBar(milestones),
+            const SizedBox(height: 10),
+            // Legend
+            Wrap(
+              spacing: 14,
+              runSpacing: 4,
+              children: [
+                _buildLegendDot(const Color(0xFF10B981), 'Done'),
+                _buildLegendDot(const Color(0xFF3B82F6), 'Active'),
+                _buildLegendDot(const Color(0xFFF59E0B), 'Review'),
+                _buildLegendDot(Colors.grey[300]!, 'Pending'),
+              ],
+            ),
+            if (projectData['estimated_end_date'] != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Due: ${DateFormat.yMMMd().format((projectData['estimated_end_date'] as Timestamp).toDate())}',
+                style: TextStyle(color: Colors.grey[500], fontSize: 13),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -424,15 +572,7 @@ class ProjectTimelineDesign3 extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 12,
-              backgroundColor: Colors.white.withOpacity(0.2),
-              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF6B35)),
-            ),
-          ),
+          _buildSegmentedBar(milestones, darkMode: true),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -477,7 +617,8 @@ class ProjectTimelineDesign3 extends StatelessWidget {
         projectId: projectId,
         userRole: userRole,
         isCompleted: isCompleted,
-        onStartWorking: userRole == 'contractor' && isPending ? () => _startWorking(context, milestone.milestoneId) : null,
+        showAmounts: showAmounts,
+        onStartWorking: (userRole == 'contractor' || userRole == 'team_member') && isPending ? () => _startWorking(context, milestone.milestoneId) : null,
         phaseNumber: phaseNumber,
         totalPhases: totalPhases,
       );
@@ -558,14 +699,15 @@ class ProjectTimelineDesign3 extends StatelessWidget {
                             ),
                           ),
                         ),
-                        Text(
-                          currencyFormat.format(milestone.amount),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isCompleted ? Colors.green : Colors.black87,
+                        if (showAmounts)
+                          Text(
+                            currencyFormat.format(milestone.amount),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isCompleted ? Colors.green : Colors.black87,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -626,7 +768,7 @@ class ProjectTimelineDesign3 extends StatelessWidget {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            if (milestone.releasedAmount != null) ...[
+                            if (showAmounts && milestone.releasedAmount != null) ...[
                               const SizedBox(width: 8),
                               Text(
                                 '• Released: ${currencyFormat.format(milestone.releasedAmount)}',
@@ -1280,6 +1422,7 @@ class _CollapsibleMilestoneCard extends StatefulWidget {
   final String projectId;
   final String userRole;
   final bool isCompleted;
+  final bool showAmounts;
   final VoidCallback? onStartWorking; // For pending milestones
   final int phaseNumber;
   final int totalPhases;
@@ -1292,6 +1435,7 @@ class _CollapsibleMilestoneCard extends StatefulWidget {
     required this.projectId,
     required this.userRole,
     required this.isCompleted,
+    this.showAmounts = true,
     this.onStartWorking,
     required this.phaseNumber,
     required this.totalPhases,
@@ -1374,14 +1518,15 @@ class _CollapsibleMilestoneCardState extends State<_CollapsibleMilestoneCard> {
                               ),
                             ),
                           ),
-                          Text(
-                            currencyFormat.format(widget.milestone.amount),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: widget.statusColor,
+                          if (widget.showAmounts)
+                            Text(
+                              currencyFormat.format(widget.milestone.amount),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: widget.statusColor,
+                              ),
                             ),
-                          ),
                           const SizedBox(width: 8),
                           Icon(
                             _isExpanded ? Icons.expand_less : Icons.expand_more,
@@ -1427,7 +1572,7 @@ class _CollapsibleMilestoneCardState extends State<_CollapsibleMilestoneCard> {
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                if (widget.milestone.releasedAmount != null) ...[
+                                if (widget.showAmounts && widget.milestone.releasedAmount != null) ...[
                                   const SizedBox(width: 8),
                                   Text(
                                     '• Released: ${currencyFormat.format(widget.milestone.releasedAmount)}',

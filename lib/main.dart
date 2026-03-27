@@ -27,6 +27,8 @@ import 'screens/shared/notification_center_screen.dart';
 import 'data/demo_project_data.dart';
 import 'components/skeleton_loader.dart';
 import 'screens/dev/email_preview_screen.dart';
+import 'screens/subcontractor/subcontractor_home_screen.dart';
+import 'screens/client/preview_home_design3.dart';
 
 /// Snappy slide-up + fade page transition (200ms)
 class SlideUpRoute<T> extends PageRouteBuilder<T> {
@@ -379,6 +381,51 @@ class _RoleDetectionScreenState extends State<RoleDetectionScreen> {
 
         debugPrint('Auto-linked team member via email lookup (${assignedProjectIds.length} projects)');
         // StreamBuilder will auto-detect the new role
+        if (mounted) setState(() => _inviteCheckDone = true);
+        return;
+      }
+
+      // Also check for pending subcontractor invite
+      final subInviteDoc = await FirebaseFirestore.instance
+          .collection('pending_sub_invites')
+          .doc(email)
+          .get();
+
+      if (subInviteDoc.exists) {
+        final subData = subInviteDoc.data()!;
+        final teamId = subData['team_id'] as String;
+        final subId = subData['sub_id'] as String;
+        final company = subData['company'] as String? ?? '';
+        final trade = subData['trade'] as String? ?? '';
+
+        // Link the sub doc: set user_uid
+        await FirebaseFirestore.instance
+            .collection('teams')
+            .doc(teamId)
+            .collection('subcontractors')
+            .doc(subId)
+            .update({
+          'user_uid': user.uid,
+        });
+
+        // Create user doc with subcontractor role
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'user_id': user.uid,
+          'email': user.email,
+          'role': 'subcontractor',
+          'team_id': teamId,
+          'sub_id': subId,
+          'sub_profile': {
+            'company': company,
+            'trade': trade,
+          },
+          'created_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        // Clean up the lookup doc
+        await subInviteDoc.reference.delete();
+
+        debugPrint('Auto-linked subcontractor via email lookup');
       }
     } catch (e) {
       debugPrint('Error checking team invite: $e');
@@ -418,13 +465,25 @@ class _RoleDetectionScreenState extends State<RoleDetectionScreen> {
               child: const ContractorHomeScreen(),
             );
           } else if (role == 'team_member') {
-            return const TeamMemberHomeScreen();
+            return DevToolsOverlay(
+              firestoreRole: 'team_member',
+              currentRole: devRoleOverride ?? 'team_member',
+              onToggleRole: () {},
+              child: const TeamMemberHomeScreen(),
+            );
           } else if (role == 'client') {
             return DevToolsOverlay(
               firestoreRole: 'client',
               currentRole: devRoleOverride ?? 'client',
               onToggleRole: () {},
               child: const ClientDashboardScreen(),
+            );
+          } else if (role == 'subcontractor') {
+            return DevToolsOverlay(
+              firestoreRole: 'subcontractor',
+              currentRole: devRoleOverride ?? 'subcontractor',
+              onToggleRole: () {},
+              child: const SubcontractorHomeScreen(),
             );
           }
         }
@@ -778,6 +837,29 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
             'created_at': FieldValue.serverTimestamp(),
           });
         }
+      } else if (role == 'team_member') {
+        // Manual team member fallback — user will need an invite link to connect
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'user_id': user.uid,
+          'email': user.email,
+          'role': 'team_member',
+          'team_member_profile': {
+            'name': user.displayName ?? '',
+            'team_role': 'worker',
+          },
+          'created_at': FieldValue.serverTimestamp(),
+        });
+      } else if (role == 'subcontractor') {
+        // Subcontractor — needs GC to link them to a team
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'user_id': user.uid,
+          'email': user.email,
+          'role': 'subcontractor',
+          'sub_profile': {
+            'company': user.displayName ?? '',
+          },
+          'created_at': FieldValue.serverTimestamp(),
+        });
       } else {
         // Client - just save basic info
         await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
@@ -826,20 +908,40 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   // Contractor button
                   _RoleCard(
                     icon: Icons.construction,
-                    title: 'Contractor',
-                    description: 'I work on construction projects',
+                    title: 'General Contractor',
+                    description: 'I manage construction projects and crews',
                     color: Theme.of(context).colorScheme.primary,
                     onTap: _isLoading ? () {} : () => _selectRole('contractor'),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
                   // Client button
                   _RoleCard(
                     icon: Icons.person,
                     title: 'Client',
-                    description: 'I\'m hiring a contractor',
+                    description: 'I\'m hiring a contractor for my project',
                     color: Theme.of(context).colorScheme.secondary,
                     onTap: _isLoading ? () {} : () => _selectRole('client'),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Team member (manual fallback)
+                  _RoleCard(
+                    icon: Icons.groups,
+                    title: 'Team Member',
+                    description: 'I was invited by my contractor',
+                    color: const Color(0xFF3B82F6),
+                    onTap: _isLoading ? () {} : () => _selectRole('team_member'),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Subcontractor
+                  _RoleCard(
+                    icon: Icons.engineering,
+                    title: 'Subcontractor',
+                    description: 'I sub for a GC on specific trades',
+                    color: const Color(0xFF8B5CF6),
+                    onTap: _isLoading ? () {} : () => _selectRole('subcontractor'),
                   ),
                 ],
               ),
@@ -1650,6 +1752,11 @@ class _ContractorProjectsScreenState
                 _buildToolbarButton(context, Icons.person, 'Profile', () {
                   Navigator.push(context, MaterialPageRoute(
                     builder: (_) => const ContractorProfileScreen(),
+                  ));
+                }),
+                _buildToolbarButton(context, Icons.visibility, 'Demo', () {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => const PreviewHomeDesign3(),
                   ));
                 }),
                 _buildToolbarButton(context, Icons.logout, 'Logout', () {
@@ -2960,14 +3067,41 @@ class ClientHomeScreen extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(height: 12),
-                                    // Progress bar
+                                    // Segmented progress bar — each milestone colored by status
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
-                                      child: LinearProgressIndicator(
-                                        value: progress,
-                                        minHeight: 8,
-                                        backgroundColor: Colors.white.withOpacity(0.3),
-                                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                      child: SizedBox(
+                                        height: 8,
+                                        child: milestones.isEmpty
+                                            ? Container(color: Colors.white.withOpacity(0.2))
+                                            : Row(
+                                                children: milestones.asMap().entries.map((entry) {
+                                                  final i = entry.key;
+                                                  final mData = entry.value.data() as Map<String, dynamic>;
+                                                  final mStatus = mData['status'] as String? ?? 'pending';
+                                                  Color color;
+                                                  switch (mStatus) {
+                                                    case 'approved':
+                                                      color = const Color(0xFF10B981);
+                                                      break;
+                                                    case 'in_progress':
+                                                      color = const Color(0xFF3B82F6);
+                                                      break;
+                                                    case 'awaiting_approval':
+                                                      color = const Color(0xFFF59E0B);
+                                                      break;
+                                                    default:
+                                                      color = Colors.white.withOpacity(0.2);
+                                                  }
+                                                  return Expanded(
+                                                    child: Container(
+                                                      margin: EdgeInsets.only(
+                                                          right: i < milestones.length - 1 ? 2 : 0),
+                                                      color: color,
+                                                    ),
+                                                  );
+                                                }).toList(),
+                                              ),
                                       ),
                                     ),
                                     const SizedBox(height: 8),
