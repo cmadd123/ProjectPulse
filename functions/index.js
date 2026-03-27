@@ -419,8 +419,8 @@ exports.sendProjectInvitation = onDocumentUpdated(
                 </div>
 
                 <div class="footer">
-                  <p><strong>ProjectPulse</strong> &middot; Real-time project communication</p>
-                  <p style="font-size: 12px; margin-top: 8px;">Keeping contractors and clients connected</p>
+                  <p><strong>${contractorName}</strong></p>
+                  <p style="font-size: 12px; margin-top: 8px;">Powered by ProjectPulse</p>
                 </div>
               </div>
             </body>
@@ -700,6 +700,569 @@ exports.sendInvoiceEmail = onDocumentCreated(
       await snap.ref.update({ emailed_at: FieldValue.serverTimestamp() });
     } catch (error) {
       console.error(`❌ Error sending invoice email:`, error);
+    }
+  }
+);
+
+// ── Shared helpers for notification-triggered emails ─────────────
+async function getEmailContext(notificationData) {
+  const db = getFirestore();
+  const result = { skip: true };
+
+  if (notificationData.email_sent) return result;
+
+  const apiKey = sendgridApiKey.value();
+  if (!apiKey) return result;
+  sgMail.setApiKey(apiKey);
+
+  const projectId = notificationData.data?.project_id;
+  if (!projectId) return result;
+
+  const projectDoc = await db.collection('projects').doc(projectId).get();
+  if (!projectDoc.exists) return result;
+  const projectData = projectDoc.data();
+
+  // Get contractor info
+  let contractorName = 'Your contractor';
+  let contractorEmail = null;
+  let contractorPhone = null;
+  const contractorRef = projectData.contractor_ref;
+  if (contractorRef) {
+    const contractorDoc = await contractorRef.get();
+    if (contractorDoc.exists) {
+      const cd = contractorDoc.data();
+      const profile = cd.contractor_profile || {};
+      contractorName = profile.business_name || cd.email?.split('@')[0] || 'Your contractor';
+      contractorEmail = cd.email || null;
+      contractorPhone = profile.phone || null;
+    }
+  }
+
+  // Get client info
+  let clientEmail = null;
+  let clientName = 'there';
+  const clientRef = notificationData.recipient_ref || projectData.client_user_ref;
+  if (clientRef) {
+    const clientDoc = await clientRef.get();
+    if (clientDoc.exists) {
+      const cd = clientDoc.data();
+      clientEmail = cd.email || null;
+      clientName = (projectData.client_name || cd.name || 'there').split(' ')[0];
+    }
+  }
+
+  // For GC-facing emails, recipient is the contractor
+  let recipientEmail = clientEmail;
+  let recipientName = clientName;
+  if (notificationData.recipient_ref && contractorRef &&
+      notificationData.recipient_ref.path === contractorRef.path) {
+    recipientEmail = contractorEmail;
+    const profile = (await contractorRef.get()).data()?.contractor_profile || {};
+    recipientName = (profile.owner_name || 'there').split(' ')[0];
+  }
+
+  const projectName = projectData.project_name || 'Your Project';
+  const projectLink = `https://projectpulsehub.com/join/${projectId}`;
+
+  return {
+    skip: false,
+    projectId, projectName, projectLink, projectData,
+    contractorName, contractorEmail, contractorPhone,
+    clientEmail, clientName,
+    recipientEmail, recipientName,
+  };
+}
+
+function buildFooter(contractorName, contractorEmail, contractorPhone) {
+  let contactLine = '';
+  if (contractorPhone || contractorEmail) {
+    const parts = [];
+    if (contractorPhone) parts.push(contractorPhone);
+    if (contractorEmail) parts.push(contractorEmail);
+    contactLine = `<p style="margin: 4px 0 0;">${parts.join(' · ')}</p>`;
+  }
+  return `
+    <div style="text-align: center; padding: 24px; background: #f8f9fa; border-top: 1px solid #e2e8f0;">
+      <p style="margin: 0; color: #2D3748; font-weight: 600; font-size: 14px;">${contractorName}</p>
+      ${contactLine ? `<div style="color: #718096; font-size: 13px;">${contactLine}</div>` : ''}
+      <p style="margin: 12px 0 0; color: #a0aec0; font-size: 11px;">Powered by ProjectPulse</p>
+    </div>
+  `;
+}
+
+function buildContractorHeader(contractorName) {
+  return `
+    <div style="background: #f8f9fa; padding: 16px 30px; border-bottom: 1px solid #e2e8f0;">
+      <table cellpadding="0" cellspacing="0"><tr>
+        <td style="width: 44px; height: 44px; background: #e9ecef; border-radius: 8px; text-align: center; vertical-align: middle; border: 1px solid #dee2e6;">
+          <span style="font-size: 22px;">&#128679;</span>
+        </td>
+        <td style="padding-left: 12px;">
+          <p style="margin: 0; color: #718096; font-size: 12px;">Your Contractor</p>
+          <p style="margin: 0; color: #2D3748; font-weight: 600; font-size: 16px;">${contractorName}</p>
+        </td>
+      </tr></table>
+    </div>
+  `;
+}
+
+function wrapEmail(headerGradient, headerTitle, headerSubtitle, bodyHtml, footer) {
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background: #f8f9fa;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background: #f8f9fa; padding: 20px 0;"><tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <tr><td style="background: ${headerGradient}; color: white; padding: 36px 30px; text-align: center;">
+          <h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 700;">${headerTitle}</h1>
+          ${headerSubtitle ? `<p style="margin: 0; opacity: 0.95; font-size: 15px;">${headerSubtitle}</p>` : ''}
+        </td></tr>
+        <tr><td>${bodyHtml}</td></tr>
+        <tr><td>${footer}</td></tr>
+      </table>
+    </td></tr></table>
+  </body></html>`;
+}
+
+// ── 6. Milestone Completed Email (to Client) ─────────────────────
+exports.sendMilestoneEmail = onDocumentCreated(
+  { document: 'notifications/{notificationId}', secrets: [sendgridApiKey] },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const nd = snap.data();
+    if (nd.type !== 'milestone_completed') return;
+
+    const ctx = await getEmailContext(nd);
+    if (ctx.skip || !ctx.clientEmail) return;
+
+    const milestoneName = (nd.body || '').split(': ')[1] || 'A milestone';
+    const footer = buildFooter(ctx.contractorName, ctx.contractorEmail, ctx.contractorPhone);
+    const contractorSection = buildContractorHeader(ctx.contractorName);
+
+    const body = `
+      ${contractorSection}
+      <div style="padding: 30px;">
+        <p style="margin: 0 0 12px;">Hi <strong>${ctx.clientName}</strong>!</p>
+        <p>${ctx.contractorName} has marked a milestone as complete on your project.</p>
+        <div style="background: #f0fdf4; border-left: 4px solid #10B981; padding: 18px; margin: 20px 0; border-radius: 8px;">
+          <p style="color: #065f46; font-weight: 600; font-size: 18px; margin: 0 0 4px;">${milestoneName}</p>
+          <p style="color: #6b7280; font-size: 14px; margin: 0;">${ctx.projectName}</p>
+        </div>
+        <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 0 0 6px; font-size: 14px; color: #374151;"><strong>What happens next?</strong></p>
+          <p style="margin: 0; font-size: 13px; color: #4b5563;">Review the work and photos, then approve the milestone. Payment will be processed upon approval.</p>
+        </div>
+        <p style="text-align: center;">
+          <a href="${ctx.projectLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10B981, #059669); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Review &amp; Approve &rarr;</a>
+        </p>
+      </div>
+    `;
+
+    const html = wrapEmail('linear-gradient(135deg, #10B981, #059669)', '&#10003; Milestone Completed', 'Ready for your approval', body, footer);
+
+    try {
+      await sgMail.send({
+        to: ctx.clientEmail,
+        from: { email: sendgridFromEmail.value(), name: ctx.contractorName },
+        replyTo: ctx.contractorEmail || sendgridFromEmail.value(),
+        subject: `✓ Milestone Complete: ${milestoneName}`,
+        html,
+        trackingSettings: { clickTracking: { enable: false, enableText: false } },
+      });
+      await snap.ref.update({ email_sent: true, email_sent_at: FieldValue.serverTimestamp() });
+      console.log(`✅ Milestone email sent to ${ctx.clientEmail}`);
+    } catch (error) {
+      console.error('❌ Milestone email error:', error);
+      await snap.ref.update({ email_sent: false, email_error: error.message });
+    }
+  }
+);
+
+// ── 7. Milestone Started Email (to Client) ───────────────────────
+exports.sendMilestoneStartedEmail = onDocumentCreated(
+  { document: 'notifications/{notificationId}', secrets: [sendgridApiKey] },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const nd = snap.data();
+    if (nd.type !== 'milestone_started') return;
+
+    const ctx = await getEmailContext(nd);
+    if (ctx.skip || !ctx.clientEmail) return;
+
+    const milestoneName = (nd.body || '').split(': Started working on "')[1]?.replace('"', '') || (nd.body || '').split(': ')[1] || 'A milestone';
+    const footer = buildFooter(ctx.contractorName, ctx.contractorEmail, ctx.contractorPhone);
+    const contractorSection = buildContractorHeader(ctx.contractorName);
+
+    const body = `
+      ${contractorSection}
+      <div style="padding: 30px;">
+        <p style="margin: 0 0 12px;">Hi <strong>${ctx.clientName}</strong>!</p>
+        <p>${ctx.contractorName} has started work on a new phase of your project.</p>
+        <div style="background: #eff6ff; border-left: 4px solid #3B82F6; padding: 18px; margin: 20px 0; border-radius: 8px;">
+          <p style="color: #1e40af; font-weight: 600; font-size: 18px; margin: 0 0 4px;">${milestoneName}</p>
+          <p style="color: #6b7280; font-size: 14px; margin: 0;">${ctx.projectName}</p>
+        </div>
+        <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 0; font-size: 13px; color: #4b5563;">You'll see photo updates as work progresses and be notified when it's ready for approval.</p>
+        </div>
+        <p style="text-align: center;">
+          <a href="${ctx.projectLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #3B82F6, #2563EB); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">View Project &rarr;</a>
+        </p>
+      </div>
+    `;
+
+    const html = wrapEmail('linear-gradient(135deg, #3B82F6, #2563EB)', '&#128640; Work Started', 'New milestone in progress', body, footer);
+
+    try {
+      await sgMail.send({
+        to: ctx.clientEmail,
+        from: { email: sendgridFromEmail.value(), name: ctx.contractorName },
+        replyTo: ctx.contractorEmail || sendgridFromEmail.value(),
+        subject: `🚀 Work Started: ${milestoneName}`,
+        html,
+        trackingSettings: { clickTracking: { enable: false, enableText: false } },
+      });
+      await snap.ref.update({ email_sent: true, email_sent_at: FieldValue.serverTimestamp() });
+      console.log(`✅ Milestone started email sent to ${ctx.clientEmail}`);
+    } catch (error) {
+      console.error('❌ Milestone started email error:', error);
+      await snap.ref.update({ email_sent: false, email_error: error.message });
+    }
+  }
+);
+
+// ── 8. Milestone Approved Email (to Contractor) ──────────────────
+exports.sendMilestoneApprovedEmail = onDocumentCreated(
+  { document: 'notifications/{notificationId}', secrets: [sendgridApiKey] },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const nd = snap.data();
+    if (nd.type !== 'milestone_approved') return;
+
+    const ctx = await getEmailContext(nd);
+    if (ctx.skip || !ctx.contractorEmail) return;
+
+    const gcName = ctx.recipientName;
+    const milestoneName = (nd.body || '').split(': ')[1]?.split(' -')[0] || 'Milestone';
+
+    const body = `
+      <div style="padding: 30px;">
+        <p style="margin: 0 0 12px;">Hi <strong>${gcName}</strong>!</p>
+        <p><strong>${ctx.clientName}</strong> has approved your milestone.</p>
+        <div style="background: #f0fdf4; border-left: 4px solid #10B981; padding: 18px; margin: 20px 0; border-radius: 8px;">
+          <p style="color: #065f46; font-weight: 600; font-size: 18px; margin: 0 0 4px;">${milestoneName}</p>
+          <p style="color: #6b7280; font-size: 14px; margin: 0;">${ctx.projectName}</p>
+        </div>
+        <p>An invoice has been generated and sent to the client.</p>
+        <p style="text-align: center;">
+          <a href="${ctx.projectLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10B981, #059669); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">View Project &rarr;</a>
+        </p>
+      </div>
+    `;
+
+    const html = wrapEmail('linear-gradient(135deg, #10B981, #059669)', '&#10003; Milestone Approved!', 'Invoice sent to client', body,
+      `<div style="text-align: center; padding: 20px; color: #a0aec0; font-size: 11px;"><p style="margin:0;">Powered by ProjectPulse</p></div>`);
+
+    try {
+      await sgMail.send({
+        to: ctx.contractorEmail,
+        from: { email: sendgridFromEmail.value(), name: 'ProjectPulse' },
+        subject: `✓ Milestone Approved: ${milestoneName} — ${ctx.projectName}`,
+        html,
+        trackingSettings: { clickTracking: { enable: false, enableText: false } },
+      });
+      await snap.ref.update({ email_sent: true, email_sent_at: FieldValue.serverTimestamp() });
+      console.log(`✅ Milestone approved email sent to ${ctx.contractorEmail}`);
+    } catch (error) {
+      console.error('❌ Milestone approved email error:', error);
+      await snap.ref.update({ email_sent: false, email_error: error.message });
+    }
+  }
+);
+
+// ── 9. Change Order Email (to Client) ────────────────────────────
+exports.sendChangeOrderEmail = onDocumentCreated(
+  { document: 'notifications/{notificationId}', secrets: [sendgridApiKey] },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const nd = snap.data();
+    if (nd.type !== 'change_order') return;
+
+    const ctx = await getEmailContext(nd);
+    if (ctx.skip || !ctx.clientEmail) return;
+
+    const notifBody = nd.body || '';
+    const parts = notifBody.split(': ');
+    const descAndCost = parts.slice(1).join(': ');
+    const lastParen = descAndCost.lastIndexOf('(');
+    let description = descAndCost;
+    let costChange = '';
+    if (lastParen !== -1) {
+      description = descAndCost.substring(0, lastParen).trim();
+      costChange = descAndCost.substring(lastParen + 1, descAndCost.length - 1);
+    }
+
+    const isIncrease = costChange.startsWith('+') || !costChange.startsWith('-');
+    const accentColor = isIncrease ? '#DC2626' : '#10B981';
+    const bgColor = isIncrease ? '#fef2f2' : '#f0fdf4';
+    const gradient = isIncrease ? 'linear-gradient(135deg, #DC2626, #B91C1C)' : 'linear-gradient(135deg, #10B981, #059669)';
+
+    const footer = buildFooter(ctx.contractorName, ctx.contractorEmail, ctx.contractorPhone);
+    const contractorSection = buildContractorHeader(ctx.contractorName);
+
+    const body = `
+      ${contractorSection}
+      <div style="padding: 30px;">
+        <p style="margin: 0 0 12px;">Hi <strong>${ctx.clientName}</strong>!</p>
+        <p>${ctx.contractorName} has submitted a change order for your project.</p>
+        <div style="background: ${bgColor}; border-left: 4px solid ${accentColor}; padding: 18px; margin: 20px 0; border-radius: 8px;">
+          ${costChange ? `<p style="color: ${accentColor}; font-weight: 700; font-size: 22px; margin: 0 0 8px;">${costChange}</p>` : ''}
+          <p style="color: #374151; font-size: 15px; margin: 0 0 4px;">${description}</p>
+          <p style="color: #6b7280; font-size: 13px; margin: 0;">${ctx.projectName}</p>
+        </div>
+        <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 0; font-size: 13px; color: #4b5563;">Review the details and approve or decline. Your project cost will be adjusted if approved.</p>
+        </div>
+        <p style="text-align: center;">
+          <a href="${ctx.projectLink}" style="display: inline-block; padding: 14px 32px; background: ${gradient}; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Review Change Order &rarr;</a>
+        </p>
+      </div>
+    `;
+
+    const headerTitle = isIncrease ? 'Change Order' : 'Change Order';
+    const html = wrapEmail(gradient, headerTitle, 'Action required', body, footer);
+
+    try {
+      await sgMail.send({
+        to: ctx.clientEmail,
+        from: { email: sendgridFromEmail.value(), name: ctx.contractorName },
+        replyTo: ctx.contractorEmail || sendgridFromEmail.value(),
+        subject: `Change Order: ${ctx.projectName}`,
+        html,
+        trackingSettings: { clickTracking: { enable: false, enableText: false } },
+      });
+      await snap.ref.update({ email_sent: true, email_sent_at: FieldValue.serverTimestamp() });
+      console.log(`✅ Change order email sent to ${ctx.clientEmail}`);
+    } catch (error) {
+      console.error('❌ Change order email error:', error);
+      await snap.ref.update({ email_sent: false, email_error: error.message });
+    }
+  }
+);
+
+// ── 10. Change Order Response Email (to Contractor) ──────────────
+exports.sendChangeOrderResponseEmail = onDocumentCreated(
+  { document: 'notifications/{notificationId}', secrets: [sendgridApiKey] },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const nd = snap.data();
+    if (nd.type !== 'change_order_approved' && nd.type !== 'change_order_declined') return;
+
+    const ctx = await getEmailContext(nd);
+    if (ctx.skip || !ctx.contractorEmail) return;
+
+    const gcName = ctx.recipientName;
+    const isApproved = nd.type === 'change_order_approved';
+    const gradient = isApproved ? 'linear-gradient(135deg, #10B981, #059669)' : 'linear-gradient(135deg, #DC2626, #B91C1C)';
+    const symbol = isApproved ? '&#10003;' : '&#10007;';
+    const action = isApproved ? 'Approved' : 'Declined';
+
+    const body = `
+      <div style="padding: 30px;">
+        <p style="margin: 0 0 12px;">Hi <strong>${gcName}</strong>!</p>
+        <p><strong>${ctx.clientName}</strong> has ${isApproved ? 'approved' : 'declined'} your change order.</p>
+        <div style="background: ${isApproved ? '#f0fdf4' : '#fef2f2'}; border-left: 4px solid ${isApproved ? '#10B981' : '#DC2626'}; padding: 18px; margin: 20px 0; border-radius: 8px;">
+          <p style="font-size: 16px; margin: 0;">${ctx.projectName}</p>
+        </div>
+        <p>${isApproved ? 'The project cost has been updated. You can proceed with the approved changes.' : 'Please contact your client to discuss alternative options.'}</p>
+        <p style="text-align: center;">
+          <a href="${ctx.projectLink}" style="display: inline-block; padding: 14px 32px; background: ${gradient}; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">View Project &rarr;</a>
+        </p>
+      </div>
+    `;
+
+    const html = wrapEmail(gradient, `${symbol} Change Order ${action}`, '', body,
+      `<div style="text-align: center; padding: 20px; color: #a0aec0; font-size: 11px;"><p style="margin:0;">Powered by ProjectPulse</p></div>`);
+
+    try {
+      await sgMail.send({
+        to: ctx.contractorEmail,
+        from: { email: sendgridFromEmail.value(), name: 'ProjectPulse' },
+        subject: `${isApproved ? '✓' : '✗'} Change Order ${action}: ${ctx.projectName}`,
+        html,
+        trackingSettings: { clickTracking: { enable: false, enableText: false } },
+      });
+      await snap.ref.update({ email_sent: true, email_sent_at: FieldValue.serverTimestamp() });
+      console.log(`✅ Change order response email sent to ${ctx.contractorEmail}`);
+    } catch (error) {
+      console.error('❌ Change order response email error:', error);
+      await snap.ref.update({ email_sent: false, email_error: error.message });
+    }
+  }
+);
+
+// ── 11. Client Request Email (Quality Issue / Addition → Contractor) ─
+exports.sendClientRequestEmail = onDocumentCreated(
+  { document: 'notifications/{notificationId}', secrets: [sendgridApiKey] },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const nd = snap.data();
+    if (nd.type !== 'quality_issue_reported' && nd.type !== 'addition_requested') return;
+
+    const ctx = await getEmailContext(nd);
+    if (ctx.skip || !ctx.contractorEmail) return;
+
+    const gcName = ctx.recipientName;
+    const isQuality = nd.type === 'quality_issue_reported';
+    const gradient = isQuality ? 'linear-gradient(135deg, #F59E0B, #D97706)' : 'linear-gradient(135deg, #8B5CF6, #7C3AED)';
+    const icon = isQuality ? '&#9888;&#65039;' : '&#128161;';
+    const title = isQuality ? 'Quality Issue Reported' : 'Addition Requested';
+    const actionText = isQuality
+      ? 'Please review the details and respond to your client promptly.'
+      : 'Please review the request and provide a quote.';
+
+    const body = `
+      <div style="padding: 30px;">
+        <p style="margin: 0 0 12px;">Hi <strong>${gcName}</strong>!</p>
+        <p><strong>${ctx.clientName}</strong> ${isQuality ? 'has reported a quality issue on' : 'wants to add something to'} your project.</p>
+        <div style="background: ${isQuality ? '#fffbeb' : '#faf5ff'}; border-left: 4px solid ${isQuality ? '#F59E0B' : '#8B5CF6'}; padding: 18px; margin: 20px 0; border-radius: 8px;">
+          <p style="font-size: 16px; margin: 0;">${ctx.projectName}</p>
+        </div>
+        <p>${actionText}</p>
+        <p style="text-align: center;">
+          <a href="${ctx.projectLink}" style="display: inline-block; padding: 14px 32px; background: ${gradient}; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">${isQuality ? 'View Issue' : 'View Request'} &rarr;</a>
+        </p>
+      </div>
+    `;
+
+    const html = wrapEmail(gradient, `${icon} ${title}`, '', body,
+      `<div style="text-align: center; padding: 20px; color: #a0aec0; font-size: 11px;"><p style="margin:0;">Powered by ProjectPulse</p></div>`);
+
+    try {
+      await sgMail.send({
+        to: ctx.contractorEmail,
+        from: { email: sendgridFromEmail.value(), name: 'ProjectPulse' },
+        subject: `${isQuality ? '⚠️ Quality Issue' : '💡 Addition Request'}: ${ctx.projectName}`,
+        html,
+        trackingSettings: { clickTracking: { enable: false, enableText: false } },
+      });
+      await snap.ref.update({ email_sent: true, email_sent_at: FieldValue.serverTimestamp() });
+      console.log(`✅ Client request email sent to ${ctx.contractorEmail}`);
+    } catch (error) {
+      console.error('❌ Client request email error:', error);
+      await snap.ref.update({ email_sent: false, email_error: error.message });
+    }
+  }
+);
+
+// ── 12. Milestone Schedule Created Email (to Client) ─────────────
+exports.sendScheduleCreatedEmail = onDocumentCreated(
+  { document: 'notifications/{notificationId}', secrets: [sendgridApiKey] },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const nd = snap.data();
+    if (nd.type !== 'milestone_schedule_created') return;
+
+    const ctx = await getEmailContext(nd);
+    if (ctx.skip || !ctx.clientEmail) return;
+
+    const footer = buildFooter(ctx.contractorName, ctx.contractorEmail, ctx.contractorPhone);
+    const contractorSection = buildContractorHeader(ctx.contractorName);
+
+    // Extract milestone count from body: "ProjectName: Contractor created X milestones..."
+    const countMatch = (nd.body || '').match(/(\d+) milestone/);
+    const count = countMatch ? countMatch[1] : 'several';
+
+    const body = `
+      ${contractorSection}
+      <div style="padding: 30px;">
+        <p style="margin: 0 0 12px;">Hi <strong>${ctx.clientName}</strong>!</p>
+        <p>${ctx.contractorName} has created a ${count}-phase plan for your project.</p>
+        <div style="background: #eff6ff; border-left: 4px solid #3B82F6; padding: 18px; margin: 20px 0; border-radius: 8px;">
+          <p style="color: #1e40af; font-weight: 600; font-size: 18px; margin: 0 0 4px;">${ctx.projectName}</p>
+          <p style="color: #6b7280; font-size: 14px; margin: 0;">${count} milestones planned</p>
+        </div>
+        <p>Open the app to see the full timeline, costs per phase, and track progress as work begins.</p>
+        <p style="text-align: center;">
+          <a href="${ctx.projectLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #3B82F6, #2563EB); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">View Your Timeline &rarr;</a>
+        </p>
+      </div>
+    `;
+
+    const html = wrapEmail('linear-gradient(135deg, #3B82F6, #2563EB)', '&#128197; Your Project Timeline', 'is ready to review', body, footer);
+
+    try {
+      await sgMail.send({
+        to: ctx.clientEmail,
+        from: { email: sendgridFromEmail.value(), name: ctx.contractorName },
+        replyTo: ctx.contractorEmail || sendgridFromEmail.value(),
+        subject: `Your project timeline is ready — ${ctx.projectName}`,
+        html,
+        trackingSettings: { clickTracking: { enable: false, enableText: false } },
+      });
+      await snap.ref.update({ email_sent: true, email_sent_at: FieldValue.serverTimestamp() });
+      console.log(`✅ Schedule created email sent to ${ctx.clientEmail}`);
+    } catch (error) {
+      console.error('❌ Schedule created email error:', error);
+      await snap.ref.update({ email_sent: false, email_error: error.message });
+    }
+  }
+);
+
+// ── 13. Project Completed Email (to Client) ──────────────────────
+exports.sendProjectCompletedEmail = onDocumentCreated(
+  { document: 'notifications/{notificationId}', secrets: [sendgridApiKey] },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const nd = snap.data();
+    if (nd.type !== 'project_completed') return;
+
+    const ctx = await getEmailContext(nd);
+    if (ctx.skip || !ctx.clientEmail) return;
+
+    const footer = buildFooter(ctx.contractorName, ctx.contractorEmail, ctx.contractorPhone);
+    const contractorSection = buildContractorHeader(ctx.contractorName);
+
+    const body = `
+      ${contractorSection}
+      <div style="padding: 30px;">
+        <p style="margin: 0 0 12px;">Hi <strong>${ctx.clientName}</strong>!</p>
+        <p>Congratulations — your project with ${ctx.contractorName} is complete!</p>
+        <div style="background: #f0fdf4; border-left: 4px solid #10B981; padding: 18px; margin: 20px 0; border-radius: 8px; text-align: center;">
+          <p style="font-size: 36px; margin: 0 0 8px;">&#127881;</p>
+          <p style="color: #065f46; font-weight: 700; font-size: 20px; margin: 0 0 4px;">${ctx.projectName}</p>
+          <p style="color: #6b7280; font-size: 14px; margin: 0;">All milestones completed</p>
+        </div>
+        <p>All photos, invoices, and project details are saved in the app for your records.</p>
+        <p style="text-align: center; margin: 24px 0 8px;">
+          <a href="${ctx.projectLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10B981, #059669); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">View Completed Project &rarr;</a>
+        </p>
+        <p style="text-align: center; font-size: 13px; color: #6b7280;">Had a great experience? Tell a friend about ${ctx.contractorName}!</p>
+      </div>
+    `;
+
+    const html = wrapEmail('linear-gradient(135deg, #10B981, #059669)', '&#127881; Project Complete!', 'Congratulations!', body, footer);
+
+    try {
+      await sgMail.send({
+        to: ctx.clientEmail,
+        from: { email: sendgridFromEmail.value(), name: ctx.contractorName },
+        replyTo: ctx.contractorEmail || sendgridFromEmail.value(),
+        subject: `🎉 Project Complete: ${ctx.projectName}`,
+        html,
+        trackingSettings: { clickTracking: { enable: false, enableText: false } },
+      });
+      await snap.ref.update({ email_sent: true, email_sent_at: FieldValue.serverTimestamp() });
+      console.log(`✅ Project completed email sent to ${ctx.clientEmail}`);
+    } catch (error) {
+      console.error('❌ Project completed email error:', error);
+      await snap.ref.update({ email_sent: false, email_error: error.message });
     }
   }
 );
