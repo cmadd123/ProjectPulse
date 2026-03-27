@@ -2072,10 +2072,10 @@ Looking forward to working with you!
                           Tab(text: 'Milestones'),
                           Tab(text: 'Activity'),
                           Tab(text: 'Expenses'),
-                          Tab(text: 'Docs'),
                           Tab(text: 'Time'),
                           Tab(text: 'Invoices'),
                           Tab(text: 'Profit'),
+                          Tab(text: 'Docs'),
                         ],
                       ),
                     ),
@@ -2239,16 +2239,7 @@ Looking forward to working with you!
                           currentUserRole: 'contractor',
                           budgetAmount: (widget.projectData['budget_amount'] as num?)?.toDouble(),
                         ),
-                        // Tab 4: Documents
-                        DocumentsTabWidget(
-                          projectId: widget.projectId,
-                          canManage: true,
-                          currentUserUid: FirebaseAuth.instance.currentUser?.uid,
-                          currentUserName: FirebaseAuth.instance.currentUser?.displayName ?? 'Contractor',
-                          currentUserRole: 'contractor',
-                          teamId: widget.projectData['team_id'] as String?,
-                        ),
-                        // Tab 5: Time
+                        // Tab 4: Time
                         TimeTabWidget(
                           projectId: widget.projectId,
                           canLogTime: true,
@@ -2257,12 +2248,21 @@ Looking forward to working with you!
                           currentUserRole: 'contractor',
                           teamId: widget.projectData['team_id'] as String?,
                         ),
-                        // Tab 6: Invoices
+                        // Tab 5: Invoices
                         _buildInvoicesTab(),
-                        // Tab 7: Profitability
+                        // Tab 6: Profitability
                         ProfitabilityTabWidget(
                           projectId: widget.projectId,
                           projectData: widget.projectData,
+                        ),
+                        // Tab 7: Documents
+                        DocumentsTabWidget(
+                          projectId: widget.projectId,
+                          canManage: true,
+                          currentUserUid: FirebaseAuth.instance.currentUser?.uid,
+                          currentUserName: FirebaseAuth.instance.currentUser?.displayName ?? 'Contractor',
+                          currentUserRole: 'contractor',
+                          teamId: widget.projectData['team_id'] as String?,
                         ),
                       ],
                     ),

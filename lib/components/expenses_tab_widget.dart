@@ -51,16 +51,11 @@ class ExpensesTabWidget extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: AddExpenseBottomSheet(
+      builder: (context) => AddExpenseBottomSheet(
           projectId: projectId,
           enteredByUid: currentUserUid!,
           enteredByName: currentUserName!,
           enteredByRole: currentUserRole!,
-        ),
       ),
     ).then((result) {
       if (result == true) {
@@ -177,7 +172,7 @@ class ExpensesTabWidget extends StatelessWidget {
         final currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
 
         return ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
                 // Add Expense button
                 if (canAddExpense)
