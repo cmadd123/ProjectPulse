@@ -1182,6 +1182,13 @@ class _ContractorProjectsScreenState
   List<String> _projectsWithAwaitingApproval = [];
   List<String> _projectsWithPendingCOs = [];
 
+  // Revenue tracking (cross-project)
+  double _totalCollected = 0;
+  double _totalOutstanding = 0;
+
+  // Overdue milestones (in_progress for 14+ days with no completion)
+  List<Map<String, dynamic>> _overdueMilestones = [];
+
   // Today's crew schedule
   List<Map<String, dynamic>> _todaySchedule = [];
   bool _scheduleLoaded = false;
@@ -1596,11 +1603,16 @@ class _ContractorProjectsScreenState
     _isLoadingAggregates = true;
 
     int totalM = 0, completedM = 0, awaitingM = 0, pendingCO = 0;
+    double collected = 0, outstanding = 0;
+    final overdue = <Map<String, dynamic>>[];
     final perProject = <String, Map<String, int>>{};
     final awaitingIds = <String>[];
     final coIds = <String>[];
 
     final futures = projects.map((doc) async {
+      final projectData = doc.data() as Map<String, dynamic>;
+      final projectName = projectData['project_name'] as String? ?? 'Project';
+
       final milestoneSnap = await FirebaseFirestore.instance
           .collection('projects')
           .doc(doc.id)
@@ -1612,11 +1624,47 @@ class _ContractorProjectsScreenState
           .collection('change_orders')
           .where('status', isEqualTo: 'pending')
           .get();
+      final invoiceSnap = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(doc.id)
+          .collection('invoices')
+          .get();
 
       final aw = milestoneSnap.docs
           .where((m) => (m.data())['status'] == 'awaiting_approval')
           .length;
       final pc = coSnap.docs.length;
+
+      // Revenue from invoices
+      double projCollected = 0, projOutstanding = 0;
+      for (final inv in invoiceSnap.docs) {
+        final invData = inv.data();
+        final amount = ((invData['amount'] ?? invData['total_due'] ?? 0) as num).toDouble();
+        if (invData['status'] == 'paid') {
+          projCollected += amount;
+        } else {
+          projOutstanding += amount;
+        }
+      }
+
+      // Overdue milestones: in_progress for 14+ days
+      final now = DateTime.now();
+      final overdueForProject = <Map<String, dynamic>>[];
+      for (final m in milestoneSnap.docs) {
+        final mData = m.data();
+        final status = mData['status'] as String? ?? '';
+        if (status == 'in_progress') {
+          final startedAt = (mData['started_at'] as Timestamp?)?.toDate();
+          if (startedAt != null && now.difference(startedAt).inDays >= 14) {
+            overdueForProject.add({
+              'projectId': doc.id,
+              'projectName': projectName,
+              'milestoneName': mData['name'] as String? ?? 'Milestone',
+              'daysInProgress': now.difference(startedAt).inDays,
+            });
+          }
+        }
+      }
 
       return {
         'projectId': doc.id,
@@ -1626,6 +1674,9 @@ class _ContractorProjectsScreenState
             .length,
         'awaiting': aw,
         'pendingCO': pc,
+        'collected': projCollected,
+        'outstanding': projOutstanding,
+        'overdue': overdueForProject,
       };
     });
 
@@ -1635,6 +1686,9 @@ class _ContractorProjectsScreenState
       completedM += r['completed'] as int;
       awaitingM += r['awaiting'] as int;
       pendingCO += r['pendingCO'] as int;
+      collected += r['collected'] as double;
+      outstanding += r['outstanding'] as double;
+      overdue.addAll(r['overdue'] as List<Map<String, dynamic>>);
 
       final pid = r['projectId'] as String;
       perProject[pid] = {
@@ -1651,6 +1705,9 @@ class _ContractorProjectsScreenState
           _completedMilestones != completedM ||
           _awaitingApproval != awaitingM ||
           _pendingCOs != pendingCO ||
+          _totalCollected != collected ||
+          _totalOutstanding != outstanding ||
+          _overdueMilestones.length != overdue.length ||
           !_aggregatesLoaded;
 
       if (hasChanges) {
@@ -1659,6 +1716,9 @@ class _ContractorProjectsScreenState
           _completedMilestones = completedM;
           _awaitingApproval = awaitingM;
           _pendingCOs = pendingCO;
+          _totalCollected = collected;
+          _totalOutstanding = outstanding;
+          _overdueMilestones = overdue;
           _perProjectAggregates = perProject;
           _projectsWithAwaitingApproval = awaitingIds;
           _projectsWithPendingCOs = coIds;
@@ -1964,6 +2024,111 @@ class _ContractorProjectsScreenState
                         )),
                       ),
                   ],
+
+                  // === Overdue Milestones Warning ===
+                  if (_aggregatesLoaded && _overdueMilestones.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Card(
+                        elevation: 0,
+                        color: const Color(0xFFFEF2F2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(color: Colors.red[200]!),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.warning_amber, color: Colors.red[600], size: 18),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${_overdueMilestones.length} milestone${_overdueMilestones.length == 1 ? '' : 's'} stalled',
+                                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.red[800]),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              ..._overdueMilestones.take(3).map((m) => Padding(
+                                padding: const EdgeInsets.only(left: 24, top: 2),
+                                child: Text(
+                                  '${m['milestoneName']} — ${m['daysInProgress']}d in progress (${m['projectName']})',
+                                  style: TextStyle(fontSize: 12, color: Colors.red[700]),
+                                ),
+                              )),
+                              if (_overdueMilestones.length > 3)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 24, top: 2),
+                                  child: Text(
+                                    '+${_overdueMilestones.length - 3} more',
+                                    style: TextStyle(fontSize: 12, color: Colors.red[500]),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // === Revenue Summary ===
+                  if (_aggregatesLoaded && (_totalCollected > 0 || _totalOutstanding > 0))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Card(
+                        elevation: 0,
+                        color: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(color: Colors.grey[200]!),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Collected',
+                                      style: TextStyle(fontSize: 11, color: Colors.grey[500], fontWeight: FontWeight.w500)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(_totalCollected),
+                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green[700]),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(width: 1, height: 36, color: Colors.grey[200]),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Outstanding',
+                                        style: TextStyle(fontSize: 11, color: Colors.grey[500], fontWeight: FontWeight.w500)),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(_totalOutstanding),
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: _totalOutstanding > 0 ? Colors.orange[700] : Colors.grey[400],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 12),
 
                   // === SECTION B: Today's Crew ===

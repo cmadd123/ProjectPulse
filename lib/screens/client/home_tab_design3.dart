@@ -404,6 +404,8 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
                   color: Colors.grey[600],
                 ),
               ),
+              const SizedBox(height: 8),
+              _buildDayCounter(),
             ],
           );
         },
@@ -412,36 +414,36 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
   }
 
   Widget _buildDayCounter() {
-    final startDate = (widget.projectData['start_date'] as Timestamp?)?.toDate();
     final endDate = (widget.projectData['estimated_end_date'] as Timestamp?)?.toDate();
 
-    if (startDate == null || endDate == null) {
-      return Text(
-        'Timeline will be set soon',
+    if (endDate == null) {
+      return const SizedBox.shrink();
+    }
+
+    final now = DateTime.now();
+    final daysLeft = endDate.difference(now).inDays;
+    final isOverdue = daysLeft < 0;
+    final dateStr = DateFormat('MMM d, yyyy').format(endDate);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: isOverdue
+            ? const Color(0xFFEF4444).withOpacity(0.08)
+            : const Color(0xFF3B82F6).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        isOverdue
+            ? 'Due: $dateStr (${-daysLeft} days overdue)'
+            : daysLeft == 0
+                ? 'Due: Today!'
+                : 'Due: $dateStr ($daysLeft days left)',
         style: TextStyle(
           fontSize: 13,
-          color: Colors.grey[500],
+          fontWeight: FontWeight.w500,
+          color: isOverdue ? const Color(0xFFEF4444) : const Color(0xFF3B82F6),
         ),
-      );
-    }
-
-    final totalDays = endDate.difference(startDate).inDays;
-    var daysElapsed = DateTime.now().difference(startDate).inDays;
-    if (daysElapsed < 0) daysElapsed = 0;
-    if (daysElapsed > totalDays) daysElapsed = totalDays;
-
-    String message = 'Day $daysElapsed of $totalDays';
-    if (daysElapsed > totalDays * 0.75) {
-      message += ' • Almost done!';
-    } else if (daysElapsed > totalDays * 0.5) {
-      message += ' • More than halfway!';
-    }
-
-    return Text(
-      message,
-      style: TextStyle(
-        fontSize: 13,
-        color: Colors.grey[500],
       ),
     );
   }
