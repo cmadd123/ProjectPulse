@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:intl/intl.dart';
 import 'utils/auth_utils.dart';
-import 'dev/dev_tools_overlay.dart';
+// import 'dev/dev_tools_overlay.dart'; // Removed for production
 import 'screens/contractor/contractor_profile_screen.dart';
 import 'screens/contractor/contractor_profile_setup_screen.dart';
 import 'screens/contractor/create_project_screen.dart';
@@ -26,7 +26,7 @@ import 'services/connectivity_service.dart';
 import 'screens/shared/notification_center_screen.dart';
 import 'data/demo_project_data.dart';
 import 'components/skeleton_loader.dart';
-import 'screens/dev/email_preview_screen.dart';
+// import 'screens/dev/email_preview_screen.dart'; // Removed for production
 import 'screens/subcontractor/subcontractor_home_screen.dart';
 import 'screens/client/preview_home_design3.dart';
 
@@ -458,33 +458,13 @@ class _RoleDetectionScreenState extends State<RoleDetectionScreen> {
           final role = data?['role'] as String?;
 
           if (role == 'contractor') {
-            return DevToolsOverlay(
-              firestoreRole: 'contractor',
-              currentRole: devRoleOverride ?? 'contractor',
-              onToggleRole: () {},
-              child: const ContractorHomeScreen(),
-            );
+            return const ContractorHomeScreen();
           } else if (role == 'team_member') {
-            return DevToolsOverlay(
-              firestoreRole: 'team_member',
-              currentRole: devRoleOverride ?? 'team_member',
-              onToggleRole: () {},
-              child: const TeamMemberHomeScreen(),
-            );
+            return const TeamMemberHomeScreen();
           } else if (role == 'client') {
-            return DevToolsOverlay(
-              firestoreRole: 'client',
-              currentRole: devRoleOverride ?? 'client',
-              onToggleRole: () {},
-              child: const ClientDashboardScreen(),
-            );
+            return const ClientDashboardScreen();
           } else if (role == 'subcontractor') {
-            return DevToolsOverlay(
-              firestoreRole: 'subcontractor',
-              currentRole: devRoleOverride ?? 'subcontractor',
-              onToggleRole: () {},
-              child: const SubcontractorHomeScreen(),
-            );
+            return const SubcontractorHomeScreen();
           }
         }
 
@@ -2833,30 +2813,19 @@ class _ContractorProjectsScreenState
           ),
         ],
       ),
-      floatingActionButton: GestureDetector(
-        onLongPress: () {
-          // TEMPORARY: Long-press to open email preview tool
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const EmailPreviewScreen(),
+              builder: (context) => const CreateProjectScreen(),
             ),
           );
         },
-        child: FloatingActionButton.extended(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CreateProjectScreen(),
-              ),
-            );
-          },
-          icon: const Icon(Icons.add),
-          label: const Text('New Project'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          foregroundColor: Colors.white,
-        ),
+        icon: const Icon(Icons.add),
+        label: const Text('New Project'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
       ),
     );
   }
