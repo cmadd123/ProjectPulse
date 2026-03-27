@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../backend/schema/milestone_update_record.dart';
+import '../services/notification_service.dart';
 
 class AddMilestoneUpdateBottomSheet extends StatefulWidget {
   final String projectId;
@@ -61,10 +62,27 @@ class _AddMilestoneUpdateBottomSheetState extends State<AddMilestoneUpdateBottom
         update,
       );
 
+      // Notify client about the milestone update
+      final projectDoc = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId)
+          .get();
+      final projectName = projectDoc.data()?['project_name'] as String? ?? 'Project';
+
+      NotificationService.sendMilestoneUpdateNotification(
+        projectId: widget.projectId,
+        projectName: projectName,
+        milestoneName: widget.milestoneName,
+        updateText: _textController.text.trim(),
+      );
+
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Update posted! Client will be notified.')),
+          const SnackBar(
+            content: Text('Update posted! Client notified.'),
+            backgroundColor: Color(0xFF10B981),
+          ),
         );
       }
     } catch (e) {

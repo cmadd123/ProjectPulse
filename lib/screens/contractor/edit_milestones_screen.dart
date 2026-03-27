@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../backend/schema/milestone_record.dart';
 import '../../models/milestone_templates.dart';
+import '../../services/notification_service.dart';
 import 'package:intl/intl.dart';
 
 class EditMilestonesScreen extends StatefulWidget {
@@ -222,13 +223,25 @@ class _EditMilestonesScreenState extends State<EditMilestonesScreen> {
 
       await batch.commit();
 
-      // TODO: Send notification to client
+      // Notify client about milestone edits
+      final projectDoc = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId)
+          .get();
+      final projectName = projectDoc.data()?['project_name'] as String? ?? 'Project';
+
+      NotificationService.sendMilestonesEditedNotification(
+        projectId: widget.projectId,
+        projectName: projectName,
+        milestoneCount: milestones.length,
+      );
 
       if (mounted) {
         Navigator.pop(context, true); // Return success
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Milestones updated! Client will be notified.'),
+            content: Text('Milestones updated! Client notified.'),
+            backgroundColor: Color(0xFF10B981),
           ),
         );
       }

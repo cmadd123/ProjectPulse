@@ -1332,6 +1332,110 @@ class NotificationService {
       debugPrint('Error sending addition approved notification: $e');
     }
   }
+
+  /// Notify client when contractor posts a milestone update
+  static Future<void> sendMilestoneUpdateNotification({
+    required String projectId,
+    required String projectName,
+    required String milestoneName,
+    required String updateText,
+  }) async {
+    try {
+      final projectDoc = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(projectId)
+          .get();
+
+      if (!projectDoc.exists) return;
+
+      final clientRef = projectDoc.data()?['client_user_ref'] as DocumentReference?;
+      if (clientRef == null) return;
+
+      final clientDoc = await clientRef.get();
+      if (!clientDoc.exists) return;
+
+      final clientData = clientDoc.data() as Map<String, dynamic>?;
+      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
+      if (fcmTokens == null || fcmTokens.isEmpty) return;
+
+      final recipientUid = _uidFromRef(clientRef);
+      // Truncate update text for notification body
+      final preview = updateText.length > 80
+          ? '${updateText.substring(0, 80)}...'
+          : updateText;
+
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'type': 'milestone_update',
+        'recipient_ref': clientRef,
+        'recipient_uid': recipientUid,
+        'fcm_tokens': fcmTokens,
+        'title': 'Update on $milestoneName',
+        'body': '$projectName: $preview',
+        'data': {
+          'project_id': projectId,
+          'project_name': projectName,
+          'type': 'milestone_update',
+          'recipient_uid': recipientUid,
+        },
+        'created_at': FieldValue.serverTimestamp(),
+        'processed': false,
+        'read': false,
+      });
+
+      debugPrint('Milestone update notification queued for client');
+    } catch (e) {
+      debugPrint('Error sending milestone update notification: $e');
+    }
+  }
+
+  /// Notify client when contractor edits milestone structure
+  static Future<void> sendMilestonesEditedNotification({
+    required String projectId,
+    required String projectName,
+    required int milestoneCount,
+  }) async {
+    try {
+      final projectDoc = await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(projectId)
+          .get();
+
+      if (!projectDoc.exists) return;
+
+      final clientRef = projectDoc.data()?['client_user_ref'] as DocumentReference?;
+      if (clientRef == null) return;
+
+      final clientDoc = await clientRef.get();
+      if (!clientDoc.exists) return;
+
+      final clientData = clientDoc.data() as Map<String, dynamic>?;
+      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
+      if (fcmTokens == null || fcmTokens.isEmpty) return;
+
+      final recipientUid = _uidFromRef(clientRef);
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'type': 'milestones_edited',
+        'recipient_ref': clientRef,
+        'recipient_uid': recipientUid,
+        'fcm_tokens': fcmTokens,
+        'title': 'Milestones Updated',
+        'body': '$projectName: Contractor updated the milestone schedule ($milestoneCount milestones)',
+        'data': {
+          'project_id': projectId,
+          'project_name': projectName,
+          'type': 'milestones_edited',
+          'recipient_uid': recipientUid,
+        },
+        'created_at': FieldValue.serverTimestamp(),
+        'processed': false,
+        'read': false,
+      });
+
+      debugPrint('Milestones edited notification queued for client');
+    } catch (e) {
+      debugPrint('Error sending milestones edited notification: $e');
+    }
+  }
 }
 
 /// Background message handler (must be top-level function)

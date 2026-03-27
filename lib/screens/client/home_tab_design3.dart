@@ -709,42 +709,115 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
   }
 
   Widget _buildComingUp() {
-    // For now, show a simple placeholder
-    // TODO: Implement sequential/chronological upcoming work logic
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.projectId)
+          .collection('milestones')
+          .snapshots(),
+      builder: (context, snapshot) {
+        final allDocs = snapshot.data?.docs ?? [];
+        // Filter to upcoming milestones, sorted by order
+        final docs = allDocs.where((doc) {
+          final status = (doc.data() as Map<String, dynamic>)['status'] as String? ?? 'pending';
+          return status == 'pending' || status == 'not_started' || status == 'in_progress';
+        }).toList()
+          ..sort((a, b) {
+            final aOrder = ((a.data() as Map<String, dynamic>)['order'] as num?) ?? 999;
+            final bOrder = ((b.data() as Map<String, dynamic>)['order'] as num?) ?? 999;
+            return aOrder.compareTo(bOrder);
+          });
+        final displayDocs = docs.take(4).toList();
+        if (displayDocs.isEmpty) return const SizedBox.shrink();
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '⚡ Coming Up',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '\u26A1 Coming Up',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...displayDocs.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final name = data['name'] as String? ?? 'Milestone';
+                final status = data['status'] as String? ?? 'pending';
+                final isActive = status == 'in_progress';
+                final amount = (data['amount'] as num?)?.toDouble() ?? 0;
+                final currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isActive ? const Color(0xFF3B82F6) : Colors.grey[300],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                            color: isActive ? const Color(0xFF1E293B) : Colors.grey[700],
+                          ),
+                        ),
+                      ),
+                      if (isActive)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'In Progress',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF3B82F6),
+                            ),
+                          ),
+                        )
+                      else
+                        Text(
+                          currencyFormat.format(amount),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+            ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Work starting soon!',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

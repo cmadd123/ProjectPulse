@@ -85,6 +85,20 @@
       ]
     },
     {
+      "collectionGroup": "milestones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "order",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "client_changes",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
