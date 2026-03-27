@@ -305,7 +305,6 @@ class _TimeTabWidgetState extends State<TimeTabWidget> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: SizedBox(
                   width: double.infinity,
-                  height: 52,
                   child: ElevatedButton.icon(
                     onPressed: () => _openLogTime(context),
                     icon: const Icon(Icons.add),
@@ -315,6 +314,7 @@ class _TimeTabWidgetState extends State<TimeTabWidget> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
                       foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                     ),

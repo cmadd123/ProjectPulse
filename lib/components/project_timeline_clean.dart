@@ -196,7 +196,7 @@ class _ProjectTimelineCleanState extends State<ProjectTimelineClean> {
   Widget _buildHeaderCard(List<MilestoneRecord> milestones) {
     final completedCount = milestones.where((m) => m.status == 'approved').length;
     final totalCount = milestones.length;
-    final projectTotal = milestones.fold(0.0, (sum, m) => sum + m.amount);
+    final projectTotal = ((widget.projectData['current_cost'] ?? widget.projectData['original_cost'] ?? 0) as num).toDouble();
     final currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
     final progress = totalCount > 0 ? completedCount / totalCount : 0.0;
 

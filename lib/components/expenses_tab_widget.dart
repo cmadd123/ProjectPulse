@@ -180,7 +180,6 @@ class ExpensesTabWidget extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 12),
                     child: SizedBox(
                       width: double.infinity,
-                      height: 52,
                       child: ElevatedButton.icon(
                         onPressed: () => _openAddExpense(context),
                         icon: const Icon(Icons.add),
@@ -188,6 +187,7 @@ class ExpensesTabWidget extends StatelessWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Theme.of(context).colorScheme.primary,
                           foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
