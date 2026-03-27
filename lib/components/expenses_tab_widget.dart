@@ -1,7 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'add_expense_bottom_sheet.dart';
 
 class ExpensesTabWidget extends StatelessWidget {
@@ -10,6 +14,7 @@ class ExpensesTabWidget extends StatelessWidget {
   final String? currentUserUid;
   final String? currentUserName;
   final String? currentUserRole;
+  final double? budgetAmount;
 
   const ExpensesTabWidget({
     super.key,
@@ -18,6 +23,7 @@ class ExpensesTabWidget extends StatelessWidget {
     this.currentUserUid,
     this.currentUserName,
     this.currentUserRole,
+    this.budgetAmount,
   });
 
   static const _categoryMeta = {
@@ -194,6 +200,20 @@ class ExpensesTabWidget extends StatelessWidget {
                       ),
                     ),
                   ),
+                // Export button
+                if (expenses.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: OutlinedButton.icon(
+                      onPressed: () => _exportExpensesCsv(context, expenses),
+                      icon: Icon(Icons.file_download, size: 18, color: Colors.grey[700]),
+                      label: Text('Export CSV', style: TextStyle(color: Colors.grey[700])),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
                 // Summary card
                 Card(
                   elevation: 2,
@@ -236,6 +256,10 @@ class ExpensesTabWidget extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                        if (budgetAmount != null && budgetAmount! > 0) ...[
+                          const SizedBox(height: 8),
+                          _buildBudgetIndicator(totalSpend, budgetAmount!, currencyFormat),
+                        ],
                         if (categoryTotals.length > 1) ...[
                           const SizedBox(height: 16),
                           const Divider(),
@@ -442,6 +466,80 @@ class ExpensesTabWidget extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _exportExpensesCsv(BuildContext context, List<QueryDocumentSnapshot> expenses) async {
+    final rows = <List<String>>[
+      ['Date', 'Vendor', 'Description', 'Category', 'Amount', 'Entered By'],
+    ];
+
+    for (final doc in expenses) {
+      final data = doc.data() as Map<String, dynamic>;
+      final date = (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now();
+      final meta = _categoryMeta[data['category'] as String? ?? 'other'];
+      rows.add([
+        DateFormat('MM/dd/yyyy').format(date),
+        data['vendor'] as String? ?? '',
+        data['description'] as String? ?? '',
+        meta?.$1 ?? 'Other',
+        (data['amount'] as num?)?.toStringAsFixed(2) ?? '0.00',
+        data['entered_by_name'] as String? ?? '',
+      ]);
+    }
+
+    final csv = const ListToCsvConverter().convert(rows);
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/expenses_${projectId.substring(0, 8)}.csv');
+    await file.writeAsString(csv);
+
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      subject: 'Expense Report',
+    );
+  }
+
+  Widget _buildBudgetIndicator(double spent, double budget, NumberFormat currency) {
+    final pct = (spent / budget).clamp(0.0, 1.5);
+    final isOver = spent > budget;
+    final remaining = budget - spent;
+    final color = pct < 0.75
+        ? const Color(0xFF10B981)
+        : pct < 1.0
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFFEF4444);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              isOver
+                  ? '${currency.format((spent - budget).abs())} over budget'
+                  : '${currency.format(remaining)} remaining',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color),
+            ),
+            Text(
+              'of ${currency.format(budget)} budget',
+              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            height: 6,
+            child: LinearProgressIndicator(
+              value: pct.clamp(0.0, 1.0),
+              backgroundColor: Colors.grey[200],
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

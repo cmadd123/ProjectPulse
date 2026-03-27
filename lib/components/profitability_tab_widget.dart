@@ -27,6 +27,7 @@ class ProfitabilityTabWidget extends StatelessWidget {
     final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
     final currencyDetailed = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
     final contractValue = ((projectData['current_cost'] ?? projectData['original_cost'] ?? 0) as num).toDouble();
+    final budgetAmount = (projectData['budget_amount'] as num?)?.toDouble();
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -113,6 +114,12 @@ class ProfitabilityTabWidget extends StatelessWidget {
                     // Cost breakdown
                     if (totalExpenses > 0) ...[
                       _buildCostBreakdown(context, totalExpenses, categoryTotals, currencyDetailed),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Budget vs Actual
+                    if (budgetAmount != null && budgetAmount > 0) ...[
+                      _buildBudgetCard(context, budgetAmount, totalExpenses, currency),
                       const SizedBox(height: 16),
                     ],
 
@@ -368,6 +375,92 @@ class ProfitabilityTabWidget extends StatelessWidget {
             Text('${pct.toStringAsFixed(0)}%', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildBudgetCard(BuildContext context, double budget, double spent, NumberFormat currency) {
+    final remaining = budget - spent;
+    final pctUsed = budget > 0 ? (spent / budget).clamp(0.0, 1.5) : 0.0;
+    final isOver = spent > budget;
+    final statusColor = pctUsed < 0.75
+        ? const Color(0xFF10B981)
+        : pctUsed < 1.0
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFFEF4444);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: isOver ? Border.all(color: const Color(0xFFEF4444), width: 1.5) : null,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text('Budget', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.grey[800])),
+                  if (isOver) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text('Over budget', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFFEF4444))),
+                    ),
+                  ],
+                ],
+              ),
+              Text('${(pctUsed * 100).toStringAsFixed(0)}% used',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: statusColor)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 10,
+              child: LinearProgressIndicator(
+                value: pctUsed.clamp(0.0, 1.0),
+                backgroundColor: Colors.grey[200],
+                valueColor: AlwaysStoppedAnimation(statusColor),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _buildBudgetMetric('Budget', currency.format(budget), Colors.grey[700]!)),
+              Expanded(child: _buildBudgetMetric('Spent', currency.format(spent), statusColor)),
+              Expanded(child: _buildBudgetMetric(
+                isOver ? 'Over by' : 'Remaining',
+                currency.format(remaining.abs()),
+                isOver ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+              )),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBudgetMetric(String label, String value, Color valueColor) {
+    return Column(
+      children: [
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+        const SizedBox(height: 4),
+        Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: valueColor)),
       ],
     );
   }

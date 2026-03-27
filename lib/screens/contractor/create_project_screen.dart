@@ -20,6 +20,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   final _clientEmailController = TextEditingController();
   final _clientPhoneController = TextEditingController();
   final _originalCostController = TextEditingController();
+  final _budgetController = TextEditingController();
 
   DateTime _startDate = DateTime.now();
   DateTime _estimatedEndDate = DateTime.now().add(const Duration(days: 14));
@@ -103,6 +104,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     _clientEmailController.dispose();
     _clientPhoneController.dispose();
     _originalCostController.dispose();
+    _budgetController.dispose();
     super.dispose();
   }
 
@@ -145,6 +147,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       final teamId = userData?['team_id'] as String?;
 
       final projectCost = double.tryParse(_originalCostController.text.trim()) ?? 0;
+      final budgetAmount = double.tryParse(_budgetController.text.trim());
 
       final projectData = {
         'contractor_ref': userRef,
@@ -164,6 +167,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
         'status': 'active',
         'original_cost': projectCost,
         'current_cost': projectCost,
+        'budget_amount': budgetAmount,
         'contract_document_url': null,
         'milestones_enabled': false, // Will be set to true after milestones are created
         'payment_status': 'unpaid',
@@ -397,6 +401,33 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
                   }
                   if (double.tryParse(value.trim()) == null) {
                     return 'Please enter valid number';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Budget (optional)
+              TextFormField(
+                controller: _budgetController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Your Budget (optional)',
+                  hintText: 'What you plan to spend',
+                  prefixText: '\$ ',
+                  helperText: 'Track your costs vs this budget — only you see this',
+                  helperMaxLines: 2,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                validator: (value) {
+                  if (value != null && value.trim().isNotEmpty) {
+                    if (double.tryParse(value.trim()) == null) {
+                      return 'Please enter valid number';
+                    }
                   }
                   return null;
                 },

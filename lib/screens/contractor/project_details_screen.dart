@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'dart:io';
 import 'package:intl/intl.dart';
+import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'create_change_order_screen.dart';
@@ -1315,6 +1316,38 @@ Looking forward to working with you!
     }
   }
 
+  Future<void> _exportInvoicesCsv(List<QueryDocumentSnapshot> invoices) async {
+    final rows = <List<String>>[
+      ['Invoice #', 'Milestone', 'Amount', 'Fee', 'Total Due', 'Status', 'Created', 'Paid Date'],
+    ];
+
+    for (final doc in invoices) {
+      final data = doc.data() as Map<String, dynamic>;
+      final createdAt = (data['created_at'] as Timestamp?)?.toDate();
+      final paidAt = (data['paid_at'] as Timestamp?)?.toDate();
+      rows.add([
+        data['invoice_number'] as String? ?? '',
+        data['milestone_name'] as String? ?? '',
+        (data['amount'] as num?)?.toStringAsFixed(2) ?? '0.00',
+        (data['transaction_fee'] as num?)?.toStringAsFixed(2) ?? '0.00',
+        (data['total_due'] as num?)?.toStringAsFixed(2) ?? '0.00',
+        data['status'] as String? ?? 'sent',
+        createdAt != null ? DateFormat('MM/dd/yyyy').format(createdAt) : '',
+        paidAt != null ? DateFormat('MM/dd/yyyy').format(paidAt) : '',
+      ]);
+    }
+
+    final csv = const ListToCsvConverter().convert(rows);
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/invoices_${widget.projectId.substring(0, 8)}.csv');
+    await file.writeAsString(csv);
+
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      subject: 'Invoice Report - ${widget.projectData['project_name'] ?? 'Project'}',
+    );
+  }
+
   Widget _buildInvoicesTab() {
     final currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
 
@@ -1357,10 +1390,24 @@ Looking forward to working with you!
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: invoices.length,
+          itemCount: invoices.length + 1, // +1 for export button
           itemBuilder: (context, index) {
-            final data = invoices[index].data() as Map<String, dynamic>;
-            final invoiceId = invoices[index].id;
+            if (index == 0) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: OutlinedButton.icon(
+                  onPressed: () => _exportInvoicesCsv(invoices),
+                  icon: Icon(Icons.file_download, size: 18, color: Colors.grey[700]),
+                  label: Text('Export CSV', style: TextStyle(color: Colors.grey[700])),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              );
+            }
+            final data = invoices[index - 1].data() as Map<String, dynamic>;
+            final invoiceId = invoices[index - 1].id;
             final status = data['status'] as String? ?? 'sent';
             final amount = (data['amount'] as num?)?.toDouble() ?? 0;
             final totalDue = (data['total_due'] as num?)?.toDouble() ?? amount;
@@ -2190,6 +2237,7 @@ Looking forward to working with you!
                           currentUserUid: FirebaseAuth.instance.currentUser?.uid,
                           currentUserName: FirebaseAuth.instance.currentUser?.displayName ?? 'Contractor',
                           currentUserRole: 'contractor',
+                          budgetAmount: (widget.projectData['budget_amount'] as num?)?.toDouble(),
                         ),
                         // Tab 4: Documents
                         DocumentsTabWidget(
