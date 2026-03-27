@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import '../services/receipt_scanner_service.dart';
 
 class AddExpenseBottomSheet extends StatefulWidget {
   final String projectId;
@@ -31,6 +32,7 @@ class _AddExpenseBottomSheetState extends State<AddExpenseBottomSheet> {
   String _category = 'materials';
   File? _receiptImage;
   bool _isSubmitting = false;
+  bool _isScanning = false;
   String? _errorMessage;
 
   static const _categories = [
@@ -58,9 +60,52 @@ class _AddExpenseBottomSheetState extends State<AddExpenseBottomSheet> {
     );
 
     if (pickedFile != null) {
+      final file = File(pickedFile.path);
       setState(() {
-        _receiptImage = File(pickedFile.path);
+        _receiptImage = file;
+        _isScanning = true;
       });
+
+      try {
+        final result = await ReceiptScannerService.scanReceipt(file);
+
+        if (mounted) {
+          setState(() => _isScanning = false);
+
+          // Pre-fill fields if scanner found data and fields are empty
+          bool filled = false;
+          if (result.amount != null && _amountController.text.trim().isEmpty) {
+            _amountController.text = result.amount!.toStringAsFixed(2);
+            filled = true;
+          }
+          if (result.vendor != null && _vendorController.text.trim().isEmpty) {
+            _vendorController.text = result.vendor!;
+            filled = true;
+          }
+
+          if (filled) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(
+                      'Receipt scanned${result.vendor != null ? ' — ${result.vendor}' : ''}${result.amount != null ? ' \$${result.amount!.toStringAsFixed(2)}' : ''}',
+                    )),
+                  ],
+                ),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isScanning = false);
+        }
+      }
     }
   }
 
@@ -262,11 +307,27 @@ class _AddExpenseBottomSheetState extends State<AddExpenseBottomSheet> {
               const SizedBox(height: 20),
 
               // Receipt photo section
-              Text(
-                'Receipt (optional)',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
+              Row(
+                children: [
+                  Text(
+                    'Receipt (optional)',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(10),
                     ),
+                    child: Text(
+                      'Auto-fill',
+                      style: TextStyle(fontSize: 11, color: Colors.blue[700], fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               if (_receiptImage != null) ...[
@@ -281,12 +342,29 @@ class _AddExpenseBottomSheetState extends State<AddExpenseBottomSheet> {
                         fit: BoxFit.cover,
                       ),
                     ),
+                    if (_isScanning)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black45,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              SizedBox(height: 8),
+                              Text('Scanning receipt...', style: TextStyle(color: Colors.white, fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      ),
                     Positioned(
                       top: 4,
                       right: 4,
                       child: IconButton(
                         icon: const Icon(Icons.cancel, color: Colors.white),
-                        onPressed: () => setState(() => _receiptImage = null),
+                        onPressed: _isScanning ? null : () => setState(() => _receiptImage = null),
                       ),
                     ),
                   ],

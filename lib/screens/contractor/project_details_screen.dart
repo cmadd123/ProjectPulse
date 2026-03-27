@@ -22,6 +22,7 @@ import '../../components/expenses_tab_widget.dart';
 import '../../components/add_expense_bottom_sheet.dart';
 import '../../components/documents_tab_widget.dart';
 import '../../components/time_tab_widget.dart';
+import '../../components/profitability_tab_widget.dart';
 import 'project_team_screen.dart';
 import '../client/client_project_timeline.dart';
 import '../../services/invoice_service.dart';
@@ -1991,7 +1992,7 @@ Looking forward to working with you!
             // Timeline View with Activity Tab
             Expanded(
               child: DefaultTabController(
-                length: 6,
+                length: 7,
                 child: Column(
                   children: [
                     Container(
@@ -2027,6 +2028,7 @@ Looking forward to working with you!
                           Tab(text: 'Docs'),
                           Tab(text: 'Time'),
                           Tab(text: 'Invoices'),
+                          Tab(text: 'Profit'),
                         ],
                       ),
                     ),
@@ -2209,6 +2211,11 @@ Looking forward to working with you!
                         ),
                         // Tab 6: Invoices
                         _buildInvoicesTab(),
+                        // Tab 7: Profitability
+                        ProfitabilityTabWidget(
+                          projectId: widget.projectId,
+                          projectData: widget.projectData,
+                        ),
                       ],
                     ),
                   ),

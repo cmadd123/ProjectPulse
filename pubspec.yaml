@@ -81,6 +81,7 @@ dependencies:
   printing: ^5.13.3
   flutter_local_notifications: ^20.1.0
   emojis: ^0.9.9
+  google_mlkit_text_recognition: ^0.15.1
 
 dev_dependencies:
   flutter_test:
