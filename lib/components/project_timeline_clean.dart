@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../backend/schema/milestone_record.dart';
+import '../screens/contractor/create_milestones_screen.dart';
 import '../services/notification_service.dart';
 import 'change_type_selector_bottom_sheet.dart';
 
@@ -122,6 +123,36 @@ class _ProjectTimelineCleanState extends State<ProjectTimelineClean> {
               'No milestones defined yet',
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
+            if (widget.userRole == 'contractor') ...[
+              const SizedBox(height: 8),
+              Text(
+                'Add milestones to track progress and payments',
+                style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CreateMilestonesScreen(
+                      projectId: widget.projectId,
+                      projectAmount: (widget.projectData['current_cost'] ?? widget.projectData['original_cost'] ?? 0).toDouble(),
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Milestones'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

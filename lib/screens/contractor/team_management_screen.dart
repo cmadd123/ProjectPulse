@@ -742,16 +742,29 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
           ],
         ),
         const SizedBox(height: 8),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('projects')
-              .where('assigned_member_uids', arrayContains: memberUid)
-              .snapshots(),
+        StreamBuilder<List<QueryDocumentSnapshot>>(
+          stream: () {
+            // For owner, show all their projects (by contractor_uid)
+            // For team members, show assigned projects
+            final currentUser = FirebaseAuth.instance.currentUser;
+            if (currentUser != null && memberUid == currentUser.uid) {
+              return FirebaseFirestore.instance
+                  .collection('projects')
+                  .where('contractor_uid', isEqualTo: memberUid)
+                  .snapshots()
+                  .map((snap) => snap.docs);
+            }
+            return FirebaseFirestore.instance
+                .collection('projects')
+                .where('assigned_member_uids', arrayContains: memberUid)
+                .snapshots()
+                .map((snap) => snap.docs);
+          }(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
-            final projects = snapshot.data?.docs ?? [];
+            final projects = snapshot.data ?? [];
             if (projects.isEmpty) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),

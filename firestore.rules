@@ -139,13 +139,20 @@ service cloud.firestore {
 
     // Pending team invites (email-based lookup for auto-linking on signup)
     match /pending_team_invites/{email} {
-      // Contractors can create invites when adding team members
-      allow create, write: if isContractor();
+      // Contractors can create, read, and write invites when managing team members
+      allow read, create, write: if isContractor();
 
       // Workers can read their own invite (email matches their auth email)
       allow read: if isAuthenticated() && email == request.auth.token.email;
 
       // Workers can delete their invite after linking (cleanup)
+      allow delete: if isAuthenticated() && email == request.auth.token.email;
+    }
+
+    // Pending subcontractor invites (email-based lookup for auto-linking on signup)
+    match /pending_sub_invites/{email} {
+      allow create, write: if isContractor();
+      allow read: if isAuthenticated() && email == request.auth.token.email;
       allow delete: if isAuthenticated() && email == request.auth.token.email;
     }
 

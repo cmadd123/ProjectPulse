@@ -7,6 +7,7 @@ import '../backend/schema/milestone_update_record.dart';
 import '../services/notification_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/invoice_service.dart';
+import '../screens/contractor/create_milestones_screen.dart';
 import 'add_milestone_update_bottom_sheet.dart';
 import 'reply_to_update_bottom_sheet.dart';
 import 'change_type_selector_bottom_sheet.dart';
@@ -891,6 +892,28 @@ class ProjectTimelineWidget extends StatelessWidget {
                           'Add milestones to track project progress',
                           style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                           textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CreateMilestonesScreen(
+                                projectId: projectId,
+                                projectAmount: (projectData['current_cost'] ?? projectData['original_cost'] ?? 0).toDouble(),
+                              ),
+                            ),
+                          ),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add Milestones'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
                       ],
                     ],

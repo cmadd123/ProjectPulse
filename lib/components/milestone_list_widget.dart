@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../backend/schema/milestone_record.dart';
+import '../screens/contractor/create_milestones_screen.dart';
 import 'change_type_selector_bottom_sheet.dart';
 
 class MilestoneListWidget extends StatelessWidget {
@@ -112,6 +113,32 @@ class MilestoneListWidget extends StatelessWidget {
                         color: Colors.grey[500],
                       ),
                       textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Semantics(
+                      button: true,
+                      label: 'Add Milestones',
+                      child: ElevatedButton.icon(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CreateMilestonesScreen(
+                              projectId: projectId,
+                              projectAmount: projectAmount,
+                            ),
+                          ),
+                        ),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Add Milestones'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ],

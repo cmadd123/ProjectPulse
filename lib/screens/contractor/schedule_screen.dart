@@ -170,16 +170,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       String memberUid, DateTime date, List<QueryDocumentSnapshot> allEntries) async {
     final normalizedDate = DateTime(date.year, date.month, date.day);
 
-    final toDelete = allEntries.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      final entryDate = (data['date'] as Timestamp).toDate();
-      final entryNormalized =
-          DateTime(entryDate.year, entryDate.month, entryDate.day);
-      return data['user_uid'] == memberUid &&
-          entryNormalized == normalizedDate;
-    }).toList();
+    // Also query Firestore directly to catch any entries the snapshot missed
+    final directQuery = await FirebaseFirestore.instance
+        .collection('teams')
+        .doc(_teamId!)
+        .collection('schedule_entries')
+        .where('user_uid', isEqualTo: memberUid)
+        .where('date',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(normalizedDate))
+        .where('date',
+            isLessThan: Timestamp.fromDate(
+                normalizedDate.add(const Duration(days: 1))))
+        .get();
 
-    for (final doc in toDelete) {
+    for (final doc in directQuery.docs) {
       await doc.reference.delete();
     }
 
@@ -321,17 +325,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       String subId, DateTime date, List<QueryDocumentSnapshot> allEntries) async {
     final normalizedDate = DateTime(date.year, date.month, date.day);
 
-    final toDelete = allEntries.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      final entryDate = (data['date'] as Timestamp).toDate();
-      final entryNormalized =
-          DateTime(entryDate.year, entryDate.month, entryDate.day);
-      return data['type'] == 'sub' &&
-          data['sub_id'] == subId &&
-          entryNormalized == normalizedDate;
-    }).toList();
+    // Query Firestore directly for reliable deletion
+    final directQuery = await FirebaseFirestore.instance
+        .collection('teams')
+        .doc(_teamId!)
+        .collection('schedule_entries')
+        .where('type', isEqualTo: 'sub')
+        .where('sub_id', isEqualTo: subId)
+        .where('date',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(normalizedDate))
+        .where('date',
+            isLessThan: Timestamp.fromDate(
+                normalizedDate.add(const Duration(days: 1))))
+        .get();
 
-    for (final doc in toDelete) {
+    for (final doc in directQuery.docs) {
       await doc.reference.delete();
     }
 
@@ -497,10 +505,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           }).toList();
 
           return Expanded(
-            child: InkWell(
-              onTap: () => _showAssignSheet(
-                  memberUid, memberName, day, allEntries),
-              child: _buildDayCell(dayEntries),
+            child: ClipRect(
+              child: InkWell(
+                onTap: () => _showAssignSheet(
+                    memberUid, memberName, day, allEntries),
+                child: _buildDayCell(dayEntries),
+              ),
             ),
           );
         }),
@@ -561,10 +571,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           }).toList();
 
           return Expanded(
-            child: InkWell(
-              onTap: () => _showSubAssignSheet(
-                  subId, companyName, day, allEntries),
-              child: _buildDayCell(dayEntries),
+            child: ClipRect(
+              child: InkWell(
+                onTap: () => _showSubAssignSheet(
+                    subId, companyName, day, allEntries),
+                child: _buildDayCell(dayEntries),
+              ),
             ),
           );
         }),
