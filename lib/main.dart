@@ -17,6 +17,7 @@ import 'screens/contractor/portfolio_screen.dart';
 import 'screens/contractor/team_management_screen.dart';
 import 'screens/contractor/schedule_screen.dart';
 import 'screens/contractor/all_projects_screen.dart';
+import 'screens/contractor/estimates_list_screen.dart';
 import 'screens/team_member/team_member_home_screen.dart';
 import 'screens/client/client_project_timeline.dart';
 import 'screens/client/client_dashboard_screen.dart';
@@ -1799,6 +1800,11 @@ class _ContractorProjectsScreenState
                       builder: (_) => const TeamManagementScreen(),
                     ));
                   }),
+                _buildToolbarButton(context, Icons.request_quote, 'Estimates', () {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => const EstimatesListScreen(),
+                  ));
+                }),
                 _buildToolbarButton(context, Icons.photo_library, 'Portfolio', () {
                   Navigator.push(context, MaterialPageRoute(
                     builder: (_) => const PortfolioScreen(),
