@@ -238,275 +238,271 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
           ),
         ],
       ),
-      body: Stepper(
-        currentStep: _currentStep,
-        onStepContinue: () {
-          if (_currentStep < 2) setState(() => _currentStep++);
-        },
-        onStepCancel: () {
-          if (_currentStep > 0) setState(() => _currentStep--);
-        },
-        controlsBuilder: (context, details) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 12),
+      body: Column(
+        children: [
+          // Tab selector
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            color: const Color(0xFFF8F9FA),
             child: Row(
               children: [
-                ElevatedButton(
-                  onPressed: details.onStepContinue,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2D3748),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  child: Text(_currentStep == 2 ? 'Preview Estimate' : 'Next'),
-                ),
-                if (_currentStep > 0) ...[
-                  const SizedBox(width: 12),
-                  TextButton(
-                    onPressed: details.onStepCancel,
-                    child: const Text('Back'),
-                  ),
-                ],
+                _buildTab(0, 'Job Info'),
+                const SizedBox(width: 8),
+                _buildTab(1, 'Items (${_lineItems.length})'),
+                const SizedBox(width: 8),
+                _buildTab(2, 'Scope'),
               ],
             ),
-          );
-        },
-        steps: [
-          // Step 1: Client & Job Info
-          Step(
-            title: const Text('Client & Job'),
-            isActive: _currentStep >= 0,
-            state: _currentStep > 0 ? StepState.complete : StepState.indexed,
-            content: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Column(
+          ),
+
+          // Content
+          Expanded(
+            child: IndexedStack(
+              index: _currentStep,
               children: [
-                TextField(
-                  controller: _titleController,
-                  decoration: InputDecoration(
-                    labelText: 'Job Title',
-                    hintText: 'e.g., Master Bath Remodel',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _clientNameController,
-                  decoration: InputDecoration(
-                    labelText: 'Client Name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _clientEmailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: 'Client Email',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _addressController,
-                  decoration: InputDecoration(
-                    labelText: 'Job Address',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Site photos
-                Container(
+                // Tab 0: Client & Job
+                ListView(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[300]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Site Photos', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[700])),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          _buildPhotoButton(Icons.camera_alt, 'Camera'),
-                          const SizedBox(width: 10),
-                          _buildPhotoButton(Icons.photo_library, 'Gallery'),
-                        ],
+                  children: [
+                    TextField(
+                      controller: _titleController,
+                      decoration: InputDecoration(
+                        labelText: 'Job Title',
+                        hintText: 'e.g., Master Bath Remodel',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.white,
                       ),
-                      if (_photos.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text('Add photos from the site visit', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          ),
-
-          // Step 2: Line Items
-          Step(
-            title: Text('Line Items (${_lineItems.length})'),
-            isActive: _currentStep >= 1,
-            state: _currentStep > 1 ? StepState.complete : StepState.indexed,
-            content: Column(
-              children: [
-                // Running total
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2D3748),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Estimate Total', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                      Text(currency.format(_total),
-                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Category breakdown
-                if (_categoryTotals.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: _categoryTotals.entries.map((e) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${e.key}: ${currency.format(e.value)}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500),
-                          ),
-                        );
-                      }).toList(),
                     ),
-                  ),
-
-                // Line items
-                ..._lineItems.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final item = entry.value;
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey[200]!),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _clientNameController,
+                      decoration: InputDecoration(
+                        labelText: 'Client Name',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _clientEmailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: 'Client Email',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addressController,
+                      decoration: InputDecoration(
+                        labelText: 'Job Address',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Site Photos', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                          const SizedBox(height: 8),
+                          Row(
                             children: [
-                              Text(item.desc, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${item.qty} × ${currencyDetail.format(item.unitPrice)} · ${item.category}',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                              ),
+                              _buildPhotoButton(Icons.camera_alt, 'Camera'),
+                              const SizedBox(width: 10),
+                              _buildPhotoButton(Icons.photo_library, 'Gallery'),
                             ],
                           ),
-                        ),
-                        Text(
-                          currencyDetail.format(item.total),
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () => setState(() => _lineItems.removeAt(i)),
-                          child: Icon(Icons.close, size: 18, color: Colors.grey[400]),
-                        ),
-                      ],
+                          if (_photos.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text('Add photos from the site visit', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+                            ),
+                        ],
+                      ),
                     ),
-                  );
-                }),
+                  ],
+                ),
 
-                // Add item button
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _addLineItem,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add Line Item'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                // Tab 1: Line Items
+                ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2D3748),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Estimate Total', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                          Text(currency.format(_total),
+                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    if (_categoryTotals.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: _categoryTotals.entries.map((e) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${e.key}: ${currency.format(e.value)}',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ..._lineItems.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final item = entry.value;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey[200]!),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item.desc, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${item.qty} × ${currencyDetail.format(item.unitPrice)} · ${item.category}',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              currencyDetail.format(item.total),
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => setState(() => _lineItems.removeAt(i)),
+                              child: Icon(Icons.close, size: 18, color: Colors.grey[400]),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _addLineItem,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Add Line Item'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
 
-          // Step 3: Scope & Terms
-          Step(
-            title: const Text('Scope & Terms'),
-            isActive: _currentStep >= 2,
-            content: Column(
-              children: [
-                TextField(
-                  controller: _scopeController,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    labelText: 'Scope of Work',
-                    hintText: 'Describe what\'s included...',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _exclusionsController,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'Exclusions',
-                    hintText: 'What\'s NOT included...',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _timelineController,
-                  decoration: InputDecoration(
-                    labelText: 'Estimated Timeline',
-                    hintText: 'e.g., 3-4 weeks',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
+                // Tab 2: Scope & Terms
+                ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    TextField(
+                      controller: _scopeController,
+                      maxLines: 4,
+                      decoration: InputDecoration(
+                        labelText: 'Scope of Work',
+                        hintText: 'Describe what\'s included...',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _exclusionsController,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        labelText: 'Exclusions',
+                        hintText: 'What\'s NOT included...',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _timelineController,
+                      decoration: InputDecoration(
+                        labelText: 'Estimated Timeline',
+                        hintText: 'e.g., 3-4 weeks',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTab(int index, String label) {
+    final isActive = _currentStep == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _currentStep = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFF2D3748) : Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isActive ? const Color(0xFF2D3748) : Colors.grey[300]!,
+            ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isActive ? Colors.white : Colors.grey[600],
+            ),
+          ),
+        ),
       ),
     );
   }
