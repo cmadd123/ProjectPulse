@@ -278,7 +278,9 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
             title: const Text('Client & Job'),
             isActive: _currentStep >= 0,
             state: _currentStep > 0 ? StepState.complete : StepState.indexed,
-            content: Column(
+            content: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Column(
               children: [
                 TextField(
                   controller: _titleController,
@@ -352,6 +354,7 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
                 ),
               ],
             ),
+          ),
           ),
 
           // Step 2: Line Items
