@@ -345,6 +345,16 @@ service cloud.firestore {
       }
     }
 
+    // Estimates collection (pre-sale quoting)
+    match /estimates/{estimateId} {
+      // Contractor can CRUD their own estimates
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isAuthenticated() &&
+        resource.data.contractor_uid == request.auth.uid;
+      // Allow listing by contractor_uid
+      allow list: if isAuthenticated();
+    }
+
     // Notifications collection (for push notification queue)
     match /notifications/{notificationId} {
       // Cloud Functions create notifications
