@@ -19,6 +19,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   final _clientNameController = TextEditingController();
   final _clientEmailController = TextEditingController();
   final _clientPhoneController = TextEditingController();
+  final _addressController = TextEditingController();
   final _originalCostController = TextEditingController();
   final _budgetController = TextEditingController();
 
@@ -103,6 +104,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     _clientNameController.dispose();
     _clientEmailController.dispose();
     _clientPhoneController.dispose();
+    _addressController.dispose();
     _originalCostController.dispose();
     _budgetController.dispose();
     super.dispose();
@@ -160,6 +162,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
         'client_name': _clientNameController.text.trim(),
         'client_email': _clientEmailController.text.trim(),
         'client_phone': _clientPhoneController.text.trim(),
+        'address': _addressController.text.trim(),
         'client_user_ref': null, // Will be set when client signs up
         'start_date': Timestamp.fromDate(_startDate),
         'estimated_end_date': Timestamp.fromDate(_estimatedEndDate),
@@ -378,6 +381,22 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
                   }
                   return null;
                 },
+              ),
+              const SizedBox(height: 16),
+
+              // Project address
+              TextFormField(
+                controller: _addressController,
+                decoration: InputDecoration(
+                  labelText: 'Project Address',
+                  hintText: '123 Main St, Austin TX 78701',
+                  prefixIcon: const Icon(Icons.location_on_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
               ),
               const SizedBox(height: 16),
 

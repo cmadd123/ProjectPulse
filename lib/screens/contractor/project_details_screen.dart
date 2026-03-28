@@ -1940,6 +1940,22 @@ Looking forward to working with you!
                       ),
                     ],
                   ),
+                  if ((widget.projectData['address'] as String? ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.location_on_outlined, size: 16, color: Colors.grey[500]),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            widget.projectData['address'] as String,
+                            style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   // Project total
                   Row(

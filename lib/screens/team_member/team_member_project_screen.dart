@@ -576,6 +576,7 @@ class _TeamMemberProjectScreenState extends State<TeamMemberProjectScreen>
   Widget _buildProjectHeader() {
     final status = widget.projectData['status'] ?? 'active';
     final clientName = widget.projectData['client_name'] ?? 'No client';
+    final address = widget.projectData['address'] as String? ?? '';
     final crewCount =
         ((widget.projectData['assigned_member_uids'] as List?)?.length ?? 0);
 
@@ -592,7 +593,10 @@ class _TeamMemberProjectScreenState extends State<TeamMemberProjectScreen>
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
         children: [
           Icon(Icons.person_outline, size: 16, color: Colors.grey[500]),
           const SizedBox(width: 6),
@@ -630,6 +634,18 @@ class _TeamMemberProjectScreenState extends State<TeamMemberProjectScreen>
               ),
             ),
           ),
+        ],
+          ),
+          if (address.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.location_on_outlined, size: 14, color: Colors.grey[400]),
+                const SizedBox(width: 6),
+                Expanded(child: Text(address, style: TextStyle(fontSize: 12, color: Colors.grey[500]), overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+          ],
         ],
       ),
     );

@@ -1105,6 +1105,20 @@ class _TeamMemberDashboardState extends State<_TeamMemberDashboard> {
                             ],
                           ],
                         ),
+                        if ((project['address'] as String? ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(Icons.location_on_outlined, size: 13, color: Colors.grey[400]),
+                              const SizedBox(width: 4),
+                              Expanded(child: Text(
+                                project['address'] as String,
+                                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                                overflow: TextOverflow.ellipsis,
+                              )),
+                            ],
+                          ),
+                        ],
                         if (totalCount > 0) ...[
                           const SizedBox(height: 14),
                           // Segmented progress bar — each milestone colored by status

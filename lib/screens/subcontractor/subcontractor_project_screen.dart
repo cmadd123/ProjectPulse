@@ -377,6 +377,7 @@ class _SubcontractorProjectScreenState
 
   Widget _buildProjectHeader() {
     final clientName = widget.projectData['client_name'] ?? '';
+    final address = widget.projectData['address'] as String? ?? '';
     final status = widget.projectData['status'] ?? 'active';
 
     return Container(
@@ -392,35 +393,50 @@ class _SubcontractorProjectScreenState
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (clientName.isNotEmpty) ...[
-            Icon(Icons.person_outline, size: 16, color: Colors.grey[500]),
-            const SizedBox(width: 6),
-            Text(clientName,
-                style: TextStyle(fontSize: 14, color: Colors.grey[700])),
-          ],
-          const Spacer(),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: status == 'active'
-                  ? const Color(0xFF10B981).withOpacity(0.1)
-                  : Colors.grey.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              status == 'active' ? 'Active' : 'Completed',
-              style: TextStyle(
-                color: status == 'active'
-                    ? const Color(0xFF10B981)
-                    : Colors.grey[600],
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+          Row(
+            children: [
+              if (clientName.isNotEmpty) ...[
+                Icon(Icons.person_outline, size: 16, color: Colors.grey[500]),
+                const SizedBox(width: 6),
+                Text(clientName,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+              ],
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: status == 'active'
+                      ? const Color(0xFF10B981).withOpacity(0.1)
+                      : Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  status == 'active' ? 'Active' : 'Completed',
+                  style: TextStyle(
+                    color: status == 'active'
+                        ? const Color(0xFF10B981)
+                        : Colors.grey[600],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
+          if (address.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.location_on_outlined, size: 14, color: Colors.grey[400]),
+                const SizedBox(width: 6),
+                Expanded(child: Text(address, style: TextStyle(fontSize: 12, color: Colors.grey[500]), overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+          ],
         ],
       ),
     );

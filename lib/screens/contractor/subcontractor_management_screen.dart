@@ -186,6 +186,7 @@ class _SubcontractorManagementScreenState
     final contactController = TextEditingController();
     final emailController = TextEditingController();
     final phoneController = TextEditingController();
+    final addressController = TextEditingController();
     final notesController = TextEditingController();
     String selectedTrade = 'other';
     bool isSaving = false;
@@ -280,6 +281,18 @@ class _SubcontractorManagementScreenState
                       ),
                     ],
                   ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: addressController,
+                    decoration: InputDecoration(
+                      labelText: 'Address',
+                      hintText: '123 Main St, Austin TX',
+                      prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     'Trade',
@@ -350,6 +363,7 @@ class _SubcontractorManagementScreenState
                                   'contact_name': contactController.text.trim(),
                                   'email': emailController.text.trim().toLowerCase(),
                                   'phone': phoneController.text.trim(),
+                                  'address': addressController.text.trim(),
                                   'trade': selectedTrade,
                                   'status': 'active',
                                   'notes': notesController.text.trim(),

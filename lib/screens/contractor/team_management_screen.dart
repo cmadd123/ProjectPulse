@@ -95,6 +95,8 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
   Future<void> _showAddMemberDialog() async {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
+    final phoneController = TextEditingController();
+    final addressController = TextEditingController();
     String selectedRole = 'worker';
 
     final result = await showDialog<bool>(
@@ -127,6 +129,25 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                         'They\'ll sign in with this email to join',
                   ),
                   keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone',
+                    hintText: '(555) 123-4567',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: addressController,
+                  decoration: const InputDecoration(
+                    labelText: 'Address',
+                    hintText: '123 Main St, Austin TX',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -223,17 +244,20 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
         nameController.text.trim(),
         emailController.text.trim(),
         selectedRole,
+        phone: phoneController.text.trim(),
+        address: addressController.text.trim(),
       );
     }
 
-    // Dispose controllers after a brief delay to avoid "dependents.isEmpty" error
     Future.delayed(const Duration(milliseconds: 100), () {
       nameController.dispose();
       emailController.dispose();
+      phoneController.dispose();
+      addressController.dispose();
     });
   }
 
-  Future<void> _addMember(String name, String email, String role) async {
+  Future<void> _addMember(String name, String email, String role, {String phone = '', String address = ''}) async {
     try {
       final teamRef =
           FirebaseFirestore.instance.collection('teams').doc(_teamId);
@@ -247,11 +271,13 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
       await memberRef.set({
         'name': name,
         'email': normalizedEmail,
+        'phone': phone,
+        'address': address,
         'role': role,
         'added_at': FieldValue.serverTimestamp(),
         'status': 'invited',
-        'user_uid': null, // Will be linked when they accept invite
-        'assigned_project_ids': <String>[], // GC picks projects next
+        'user_uid': null,
+        'assigned_project_ids': <String>[],
       });
 
       if (mounted) {

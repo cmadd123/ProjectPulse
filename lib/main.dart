@@ -1738,7 +1738,8 @@ class _ContractorProjectsScreenState
         final query = _searchQuery.toLowerCase();
         final name = (project['project_name'] ?? '').toString().toLowerCase();
         final client = (project['client_name'] ?? '').toString().toLowerCase();
-        if (!name.contains(query) && !client.contains(query)) return false;
+        final address = (project['address'] ?? '').toString().toLowerCase();
+        if (!name.contains(query) && !client.contains(query) && !address.contains(query)) return false;
       }
       return true;
     }).toList();
@@ -2693,6 +2694,15 @@ class _ContractorProjectsScreenState
                                               color: Colors.grey[600]),
                                           overflow: TextOverflow.ellipsis,
                                         ),
+                                        if ((project['address'] as String? ?? '').isNotEmpty) ...[
+                                          const SizedBox(height: 1),
+                                          Text(
+                                            project['address'] as String,
+                                            style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
