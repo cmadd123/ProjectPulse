@@ -52,11 +52,23 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
   DocumentReference? _selectedMilestone;
   bool _milestonePreselected = false; // Track if milestone was preselected from card button
   List<Map<String, dynamic>> _milestones = [];
+  bool _isSolo = false;
 
   @override
   void initState() {
     super.initState();
     _loadMilestones();
+    _loadSoloFlag();
+  }
+
+  Future<void> _loadSoloFlag() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final profile = doc.data()?['contractor_profile'] as Map<String, dynamic>?;
+    if (mounted && profile?['is_solo'] == true) {
+      setState(() => _isSolo = true);
+    }
   }
 
   Future<void> _loadMilestones() async {
@@ -2039,7 +2051,7 @@ Looking forward to working with you!
             // Timeline View with Activity Tab
             Expanded(
               child: DefaultTabController(
-                length: 7,
+                length: _isSolo ? 5 : 7,
                 child: Column(
                   children: [
                     Container(
@@ -2068,14 +2080,14 @@ Looking forward to working with you!
                           fontWeight: FontWeight.normal,
                           fontSize: 14,
                         ),
-                        tabs: const [
-                          Tab(text: 'Milestones'),
-                          Tab(text: 'Activity'),
-                          Tab(text: 'Expenses'),
-                          Tab(text: 'Time'),
-                          Tab(text: 'Invoices'),
-                          Tab(text: 'Profit'),
-                          Tab(text: 'Docs'),
+                        tabs: [
+                          const Tab(text: 'Milestones'),
+                          const Tab(text: 'Activity'),
+                          const Tab(text: 'Expenses'),
+                          if (!_isSolo) const Tab(text: 'Time'),
+                          const Tab(text: 'Invoices'),
+                          const Tab(text: 'Profit'),
+                          if (!_isSolo) const Tab(text: 'Docs'),
                         ],
                       ),
                     ),
@@ -2239,15 +2251,16 @@ Looking forward to working with you!
                           currentUserRole: 'contractor',
                           budgetAmount: (widget.projectData['budget_amount'] as num?)?.toDouble(),
                         ),
-                        // Tab 4: Time
-                        TimeTabWidget(
-                          projectId: widget.projectId,
-                          canLogTime: true,
-                          currentUserUid: FirebaseAuth.instance.currentUser?.uid,
-                          currentUserName: FirebaseAuth.instance.currentUser?.displayName ?? 'Contractor',
-                          currentUserRole: 'contractor',
-                          teamId: widget.projectData['team_id'] as String?,
-                        ),
+                        // Tab 4: Time (hidden for solo)
+                        if (!_isSolo)
+                          TimeTabWidget(
+                            projectId: widget.projectId,
+                            canLogTime: true,
+                            currentUserUid: FirebaseAuth.instance.currentUser?.uid,
+                            currentUserName: FirebaseAuth.instance.currentUser?.displayName ?? 'Contractor',
+                            currentUserRole: 'contractor',
+                            teamId: widget.projectData['team_id'] as String?,
+                          ),
                         // Tab 5: Invoices
                         _buildInvoicesTab(),
                         // Tab 6: Profitability
@@ -2255,15 +2268,16 @@ Looking forward to working with you!
                           projectId: widget.projectId,
                           projectData: widget.projectData,
                         ),
-                        // Tab 7: Documents
-                        DocumentsTabWidget(
-                          projectId: widget.projectId,
-                          canManage: true,
-                          currentUserUid: FirebaseAuth.instance.currentUser?.uid,
-                          currentUserName: FirebaseAuth.instance.currentUser?.displayName ?? 'Contractor',
-                          currentUserRole: 'contractor',
-                          teamId: widget.projectData['team_id'] as String?,
-                        ),
+                        // Tab 7: Documents (hidden for solo)
+                        if (!_isSolo)
+                          DocumentsTabWidget(
+                            projectId: widget.projectId,
+                            canManage: true,
+                            currentUserUid: FirebaseAuth.instance.currentUser?.uid,
+                            currentUserName: FirebaseAuth.instance.currentUser?.displayName ?? 'Contractor',
+                            currentUserRole: 'contractor',
+                            teamId: widget.projectData['team_id'] as String?,
+                          ),
                       ],
                     ),
                   ),

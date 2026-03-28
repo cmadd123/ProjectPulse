@@ -1173,6 +1173,7 @@ class _ContractorProjectsScreenState
   List<Map<String, dynamic>> _todaySchedule = [];
   bool _scheduleLoaded = false;
   String? _teamId;
+  bool _isSolo = false;
 
   // Periodic aggregate refresh
   List<QueryDocumentSnapshot>? _lastProjectDocs;
@@ -1218,6 +1219,18 @@ class _ContractorProjectsScreenState
         final userData = userDoc.data()!;
         debugPrint('✅ User document exists');
         debugPrint('📄 Fields: ${userData.keys.join(", ")}');
+
+        // Check solo contractor flag
+        final profile = userData['contractor_profile'] as Map<String, dynamic>?;
+        final isSolo = profile?['is_solo'] == true;
+        if (mounted && isSolo != _isSolo) {
+          setState(() => _isSolo = isSolo);
+        }
+        if (isSolo) {
+          debugPrint('👤 Solo contractor — skipping team/schedule loading');
+          if (mounted) setState(() => _scheduleLoaded = true);
+          return;
+        }
 
         final teamIdFromUser = userData['team_id'];
         if (teamIdFromUser != null) {
@@ -1774,16 +1787,18 @@ class _ContractorProjectsScreenState
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildToolbarButton(context, Icons.calendar_month, 'Schedule', () {
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => const ScheduleScreen(),
-                  ));
-                }),
-                _buildToolbarButton(context, Icons.groups, 'Team', () {
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => const TeamManagementScreen(),
-                  ));
-                }),
+                if (!_isSolo)
+                  _buildToolbarButton(context, Icons.calendar_month, 'Schedule', () {
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const ScheduleScreen(),
+                    ));
+                  }),
+                if (!_isSolo)
+                  _buildToolbarButton(context, Icons.groups, 'Team', () {
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const TeamManagementScreen(),
+                    ));
+                  }),
                 _buildToolbarButton(context, Icons.photo_library, 'Portfolio', () {
                   Navigator.push(context, MaterialPageRoute(
                     builder: (_) => const PortfolioScreen(),
@@ -2112,7 +2127,7 @@ class _ContractorProjectsScreenState
                   const SizedBox(height: 12),
 
                   // === SECTION B: Today's Crew ===
-                  if (_todaySchedule.isNotEmpty) ...[
+                  if (!_isSolo && _todaySchedule.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 8),
                       child: Row(
@@ -2472,17 +2487,19 @@ class _ContractorProjectsScreenState
                         label: 'Complete',
                         color: Colors.blue[700]!,
                       ),
-                      const SizedBox(width: 10),
-                      _buildMetricCard(
-                        context,
-                        icon: Icons.groups,
-                        value: '${allCrewUids.length}',
-                        label: 'Crew',
-                        color: Colors.purple[600]!,
-                        onTap: () => Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => const TeamManagementScreen(),
-                        )),
-                      ),
+                      if (!_isSolo) ...[
+                        const SizedBox(width: 10),
+                        _buildMetricCard(
+                          context,
+                          icon: Icons.groups,
+                          value: '${allCrewUids.length}',
+                          label: 'Crew',
+                          color: Colors.purple[600]!,
+                          onTap: () => Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => const TeamManagementScreen(),
+                          )),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 16),

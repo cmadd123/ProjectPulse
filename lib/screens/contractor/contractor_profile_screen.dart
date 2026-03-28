@@ -40,6 +40,7 @@ class _ContractorProfileScreenState extends State<ContractorProfileScreen> {
   Color _brandColor = const Color(0xFFFF6B35);
   Color? _extractedLogoColor; // Auto-extracted from logo
   bool _isExtractingColor = false;
+  bool _isSoloContractor = false;
 
   static const List<Color> _presetColors = [
     Color(0xFFFF6B35), // Construction Orange
@@ -87,6 +88,7 @@ class _ContractorProfileScreenState extends State<ContractorProfileScreen> {
         if (colorHex != null && colorHex.isNotEmpty) {
           _brandColor = Color(int.parse(colorHex.replaceFirst('#', '0xFF')));
         }
+        _isSoloContractor = profile['is_solo'] == true;
       });
       // Extract color from existing logo for the "Recommended" swatch
       if (_existingLogoUrl != null) {
@@ -216,6 +218,7 @@ $profileLink
         'contractor_profile.phone': _phoneController.text.trim(),
         'contractor_profile.specialties': _selectedSpecialties,
         'contractor_profile.brand_color': brandColorHex,
+        'contractor_profile.is_solo': _isSoloContractor,
         'contractor_profile.subscription_tier': 'free',
         'contractor_profile.subscription_status': 'active',
       };
@@ -414,6 +417,59 @@ $profileLink
                   }
                   return null;
                 },
+              ),
+              const SizedBox(height: 20),
+
+              // Solo contractor toggle
+              InkWell(
+                onTap: () => setState(() => _isSoloContractor = !_isSoloContractor),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: _isSoloContractor ? Colors.blue[50] : Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _isSoloContractor ? Colors.blue[300]! : Colors.grey[300]!,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isSoloContractor ? Icons.person : Icons.groups,
+                        color: _isSoloContractor ? Colors.blue[700] : Colors.grey[600],
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isSoloContractor ? 'Solo Contractor' : 'I have a crew',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                color: _isSoloContractor ? Colors.blue[800] : Colors.grey[800],
+                              ),
+                            ),
+                            Text(
+                              _isSoloContractor
+                                  ? 'Schedule and team features hidden'
+                                  : 'Manage crew schedules and assignments',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _isSoloContractor,
+                        onChanged: (v) => setState(() => _isSoloContractor = v),
+                        activeColor: Colors.blue[600],
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
 
