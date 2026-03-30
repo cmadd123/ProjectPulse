@@ -1818,11 +1818,6 @@ class _ContractorProjectsScreenState
                     builder: (_) => const ContractorProfileScreen(),
                   ));
                 }),
-                _buildToolbarButton(context, Icons.visibility, 'Demo', () {
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => const PreviewHomeDesign3(),
-                  ));
-                }),
                 _buildToolbarButton(context, Icons.logout, 'Logout', () {
                   confirmLogout(context);
                 }),
@@ -1888,7 +1883,6 @@ class _ContractorProjectsScreenState
                               const SizedBox(height: 28),
                               SizedBox(
                                 width: double.infinity,
-                                height: 50,
                                 child: ElevatedButton.icon(
                                   onPressed: () async {
                                     final result = await Navigator.push(
@@ -1905,31 +1899,7 @@ class _ContractorProjectsScreenState
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Theme.of(context).colorScheme.primary,
                                     foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                width: double.infinity,
-                                height: 50,
-                                child: OutlinedButton.icon(
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => ClientProjectTimeline(
-                                          projectId: DemoProjectData.demoProjectId,
-                                          projectData: DemoProjectData.project,
-                                          isPreview: true,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  icon: const Icon(Icons.visibility),
-                                  label: const Text('See a Demo Project',
-                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   ),
                                 ),
