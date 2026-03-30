@@ -18,6 +18,7 @@ const stripePlatformFeePercent = defineString('STRIPE_PLATFORM_FEE_PERCENT');
 // Secret values come from Cloud Secret Manager
 const sendgridApiKey = defineSecret('SENDGRID_API_KEY');
 const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
+const stripeWebhookSecret = defineSecret('STRIPE_WEBHOOK_SECRET');
 
 // Twilio is not yet configured — to enable SMS, run:
 //   firebase functions:secrets:set TWILIO_ACCOUNT_SID
@@ -1362,18 +1363,15 @@ exports.createCheckoutSession = onRequest(
 // ── 15. Stripe: Webhook (payment confirmation) ──────────────────
 // Stripe sends events here after payment succeeds/fails
 exports.stripeWebhook = onRequest(
-  { secrets: [stripeSecretKey] },
+  { secrets: [stripeSecretKey, stripeWebhookSecret] },
   async (req, res) => {
     const stripe = require('stripe')(stripeSecretKey.value());
     const db = getFirestore();
 
     let event;
     try {
-      // For production, verify webhook signature:
-      // const sig = req.headers['stripe-signature'];
-      // event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
-      // For now in test mode, parse directly:
-      event = req.body;
+      const sig = req.headers['stripe-signature'];
+      event = stripe.webhooks.constructEvent(req.rawBody, sig, stripeWebhookSecret.value());
     } catch (err) {
       console.error('❌ Webhook signature verification failed:', err);
       res.status(400).send(`Webhook Error: ${err.message}`);
