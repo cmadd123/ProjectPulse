@@ -203,12 +203,12 @@ class _ContractorProfileSetupScreenState
               // Continue button
               SizedBox(
                 width: double.infinity,
-                height: 50,
                 child: ElevatedButton(
                   onPressed: _continue,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -222,6 +222,7 @@ class _ContractorProfileSetupScreenState
                   ),
                 ),
               ),
+              const SizedBox(height: 32),
             ],
           ),
         ),
