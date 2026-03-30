@@ -891,8 +891,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   // Contractor button
                   _RoleCard(
                     icon: Icons.construction,
-                    title: 'General Contractor',
-                    description: 'I manage construction projects and crews',
+                    title: 'Contractor',
+                    description: 'I run projects — solo or with a crew',
                     color: Theme.of(context).colorScheme.primary,
                     onTap: _isLoading ? () {} : () => _selectRole('contractor'),
                   ),
