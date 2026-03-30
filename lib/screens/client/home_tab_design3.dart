@@ -6,6 +6,7 @@ import '../../backend/schema/milestone_record.dart';
 import '../../services/notification_service.dart';
 import '../../services/connectivity_service.dart';
 import '../../services/invoice_service.dart';
+import '../../services/stripe_service.dart';
 
 /// Design 3: Personality Injection (Polished Current)
 /// Keep existing layout, add warmth and human touches
@@ -76,9 +77,9 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
   }
 
   void _showPaymentDialog(String milestoneName, double milestoneAmount, String? invoiceId) {
-    final fee = milestoneAmount * 0.05;
-    final total = milestoneAmount + fee;
     final currencyFmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    final contractorName = widget.projectData['contractor_business_name'] as String? ?? '';
+    final clientEmail = widget.projectData['client_email'] as String?;
 
     showDialog(
       context: context,
@@ -101,7 +102,7 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
               const Text('Milestone Approved!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(milestoneName, style: TextStyle(fontSize: 15, color: Colors.grey[600])),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -109,39 +110,65 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
                   border: Border.all(color: Colors.grey[200]!),
                 ),
                 child: Column(children: [
-                  _dialogRow('Milestone Amount', currencyFmt.format(milestoneAmount)),
-                  const SizedBox(height: 8),
-                  _dialogRow('Processing Fee', currencyFmt.format(fee), valueColor: Colors.grey[500]),
-                  const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider(height: 1)),
-                  _dialogRow('Total', currencyFmt.format(total), isBold: true),
+                  _dialogRow('Amount Due', currencyFmt.format(milestoneAmount), isBold: true),
                 ]),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
+              // Pay Online (Stripe)
               SizedBox(
-                width: double.infinity, height: 52,
-                child: ElevatedButton(
+                width: double.infinity,
+                child: ElevatedButton.icon(
                   onPressed: () async {
                     Navigator.pop(ctx);
                     if (invoiceId != null) {
-                      try { await InvoiceService.markAsPaid(widget.projectId, invoiceId); } catch (_) {}
+                      final success = await StripeService.openCheckout(
+                        projectId: widget.projectId,
+                        invoiceId: invoiceId,
+                        amount: milestoneAmount,
+                        milestoneName: milestoneName,
+                        clientEmail: clientEmail,
+                        contractorName: contractorName,
+                      );
+                      if (!success && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Unable to open payment page. You can pay your contractor directly.'), backgroundColor: Colors.orange),
+                        );
+                      }
                     }
+                  },
+                  icon: const Icon(Icons.credit_card, size: 20),
+                  label: Text('Pay Online ${currencyFmt.format(milestoneAmount)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[600], foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text('Card or bank transfer · small processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              const SizedBox(height: 12),
+              // Pay Another Way
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Payment complete for $milestoneName!'), backgroundColor: Colors.green),
+                        SnackBar(
+                          content: Text('Pay $contractorName directly via Zelle, Venmo, or check. They\'ll mark it as paid.'),
+                          duration: const Duration(seconds: 5),
+                        ),
                       );
                     }
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[600], foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text('Pay ${currencyFmt.format(total)}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  child: const Text('Pay Another Way', style: TextStyle(fontSize: 14)),
                 ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('Pay Later', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
               ),
             ],
           ),

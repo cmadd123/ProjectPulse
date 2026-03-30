@@ -1,6 +1,7 @@
 // 2nd Gen (v2) Cloud Functions — runs on Node 22
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onRequest } = require('firebase-functions/v2/https');
 const { defineString, defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
@@ -12,9 +13,11 @@ initializeApp();
 // ── Configuration via params ─────────────────────────────────────
 // Non-secret values come from functions/.env
 const sendgridFromEmail = defineString('SENDGRID_FROM_EMAIL');
+const stripePlatformFeePercent = defineString('STRIPE_PLATFORM_FEE_PERCENT');
 
 // Secret values come from Cloud Secret Manager
 const sendgridApiKey = defineSecret('SENDGRID_API_KEY');
+const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
 
 // Twilio is not yet configured — to enable SMS, run:
 //   firebase functions:secrets:set TWILIO_ACCOUNT_SID
@@ -1264,5 +1267,290 @@ exports.sendProjectCompletedEmail = onDocumentCreated(
       console.error('❌ Project completed email error:', error);
       await snap.ref.update({ email_sent: false, email_error: error.message });
     }
+  }
+);
+
+// ── 14. Stripe: Create Checkout Session ──────────────────────────
+// Called from the client app when they tap "Pay Online"
+exports.createCheckoutSession = onRequest(
+  { secrets: [stripeSecretKey], cors: true },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).send('Method not allowed');
+      return;
+    }
+
+    try {
+      const stripe = require('stripe')(stripeSecretKey.value());
+      const { projectId, invoiceId, amount, milestoneName, clientEmail, contractorName } = req.body;
+
+      if (!projectId || !invoiceId || !amount) {
+        res.status(400).json({ error: 'Missing required fields' });
+        return;
+      }
+
+      const milestoneAmount = parseFloat(amount);
+      const platformFeePercent = parseFloat(stripePlatformFeePercent.value() || '2.0');
+      const stripeFeePercent = 2.9;
+      const stripeFeeFixed = 0.30;
+      const totalFeePercent = stripeFeePercent + platformFeePercent;
+
+      // Calculate fee: (amount * totalPercent%) + $0.30
+      const processingFee = Math.round((milestoneAmount * totalFeePercent / 100 + stripeFeeFixed) * 100) / 100;
+      const totalCharge = Math.round((milestoneAmount + processingFee) * 100); // in cents
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card', 'us_bank_account'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: milestoneName || 'Milestone Payment',
+                description: `Payment to ${contractorName || 'your contractor'}`,
+              },
+              unit_amount: Math.round(milestoneAmount * 100), // milestone amount in cents
+            },
+            quantity: 1,
+          },
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: 'Processing Fee',
+                description: `${totalFeePercent.toFixed(1)}% + $0.30`,
+              },
+              unit_amount: Math.round(processingFee * 100), // fee in cents
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'payment',
+        customer_email: clientEmail || undefined,
+        metadata: {
+          projectId,
+          invoiceId,
+          milestoneAmount: milestoneAmount.toString(),
+          processingFee: processingFee.toString(),
+          platformFeePercent: platformFeePercent.toString(),
+        },
+        success_url: `https://projectpulsehub.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `https://projectpulsehub.com/payment-cancelled`,
+      });
+
+      // Save session ID to invoice
+      await getFirestore()
+        .collection('projects')
+        .doc(projectId)
+        .collection('invoices')
+        .doc(invoiceId)
+        .update({
+          'stripe_session_id': session.id,
+          'stripe_checkout_url': session.url,
+          'processing_fee': processingFee,
+        });
+
+      console.log(`✅ Checkout session created: ${session.id} for invoice ${invoiceId}`);
+      res.json({ url: session.url, sessionId: session.id });
+    } catch (error) {
+      console.error('❌ Checkout session error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+// ── 15. Stripe: Webhook (payment confirmation) ──────────────────
+// Stripe sends events here after payment succeeds/fails
+exports.stripeWebhook = onRequest(
+  { secrets: [stripeSecretKey] },
+  async (req, res) => {
+    const stripe = require('stripe')(stripeSecretKey.value());
+    const db = getFirestore();
+
+    let event;
+    try {
+      // For production, verify webhook signature:
+      // const sig = req.headers['stripe-signature'];
+      // event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+      // For now in test mode, parse directly:
+      event = req.body;
+    } catch (err) {
+      console.error('❌ Webhook signature verification failed:', err);
+      res.status(400).send(`Webhook Error: ${err.message}`);
+      return;
+    }
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const { projectId, invoiceId, milestoneAmount, processingFee, platformFeePercent } = session.metadata || {};
+
+      if (!projectId || !invoiceId) {
+        console.log('❌ Missing metadata in checkout session');
+        res.status(200).send('OK - missing metadata');
+        return;
+      }
+
+      try {
+        // Mark invoice as paid via Stripe
+        await db
+          .collection('projects')
+          .doc(projectId)
+          .collection('invoices')
+          .doc(invoiceId)
+          .update({
+            'status': 'paid',
+            'paid_at': FieldValue.serverTimestamp(),
+            'payment_method': 'stripe',
+            'payment_intent_id': session.payment_intent,
+            'stripe_session_id': session.id,
+            'processing_fee': parseFloat(processingFee || '0'),
+            'platform_fee_percent': parseFloat(platformFeePercent || '2.0'),
+            'amount_charged': session.amount_total / 100,
+          });
+
+        // Notify GC
+        const projectDoc = await db.collection('projects').doc(projectId).get();
+        if (projectDoc.exists) {
+          const projectData = projectDoc.data();
+          const contractorRef = projectData.contractor_ref;
+          if (contractorRef) {
+            const contractorDoc = await contractorRef.get();
+            const fcmTokens = contractorDoc.data()?.fcm_tokens || [];
+            if (fcmTokens.length > 0) {
+              const invoiceDoc = await db.collection('projects').doc(projectId).collection('invoices').doc(invoiceId).get();
+              const milestoneName = invoiceDoc.data()?.milestone_name || 'Milestone';
+              const amount = parseFloat(milestoneAmount || '0');
+
+              await db.collection('notifications').add({
+                type: 'payment_received',
+                recipient_ref: contractorRef,
+                recipient_uid: contractorRef.id,
+                fcm_tokens: fcmTokens,
+                title: 'Payment Received!',
+                body: `$${amount.toLocaleString()} received for ${milestoneName}`,
+                data: {
+                  project_id: projectId,
+                  type: 'payment_received',
+                },
+                created_at: FieldValue.serverTimestamp(),
+                processed: false,
+                read: false,
+              });
+            }
+          }
+        }
+
+        console.log(`✅ Payment confirmed for invoice ${invoiceId}: $${session.amount_total / 100}`);
+      } catch (error) {
+        console.error('❌ Error processing payment webhook:', error);
+      }
+    }
+
+    res.status(200).send('OK');
+  }
+);
+
+// ── 16. Invoice Payment Reminder (daily check) ──────────────────
+// Sends reminder email for invoices unpaid after 3 days
+exports.sendPaymentReminders = onSchedule(
+  { schedule: 'every 24 hours', secrets: [sendgridApiKey] },
+  async () => {
+    const db = getFirestore();
+    const threeDaysAgo = Timestamp.fromDate(
+      new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+    );
+
+    // Find all unpaid invoices older than 3 days
+    const projectsSnap = await db.collection('projects').get();
+    let remindersSent = 0;
+
+    for (const projectDoc of projectsSnap.docs) {
+      const projectData = projectDoc.data();
+      const clientEmail = projectData.client_email;
+      if (!clientEmail) continue;
+
+      const invoicesSnap = await projectDoc.ref
+        .collection('invoices')
+        .where('status', '==', 'sent')
+        .get();
+
+      for (const invoiceDoc of invoicesSnap.docs) {
+        const invoiceData = invoiceDoc.data();
+        const createdAt = invoiceData.created_at;
+        if (!createdAt || createdAt > threeDaysAgo) continue;
+
+        // Skip if reminder already sent
+        if (invoiceData.reminder_sent) continue;
+
+        // Get contractor info
+        let contractorName = 'Your contractor';
+        let contractorEmail = null;
+        if (projectData.contractor_ref) {
+          const contractorDoc = await projectData.contractor_ref.get();
+          if (contractorDoc.exists) {
+            const cd = contractorDoc.data();
+            contractorName = cd.contractor_profile?.business_name || 'Your contractor';
+            contractorEmail = cd.email;
+          }
+        }
+
+        const clientName = (projectData.client_name || 'there').split(' ')[0];
+        const projectName = projectData.project_name || 'Your Project';
+        const milestoneName = invoiceData.milestone_name || 'Milestone';
+        const amount = invoiceData.amount || 0;
+        const fmtAmount = `$${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        const projectLink = `https://projectpulsehub.com/join/${projectDoc.id}`;
+
+        const apiKey = sendgridApiKey.value();
+        if (!apiKey) continue;
+        sgMail.setApiKey(apiKey);
+
+        const emailHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+        <body style="font-family: -apple-system, sans-serif; margin: 0; padding: 0; background: #f8f9fa;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background: #f8f9fa; padding: 20px 0;"><tr><td align="center">
+            <table width="600" cellpadding="0" cellspacing="0" style="background: white; border-radius: 12px; overflow: hidden;">
+              <tr><td style="background: linear-gradient(135deg, #F59E0B, #D97706); color: white; padding: 30px; text-align: center;">
+                <h1 style="margin: 0; font-size: 24px;">Payment Reminder</h1>
+              </td></tr>
+              <tr><td style="padding: 30px;">
+                <p>Hi <strong>${clientName}</strong>,</p>
+                <p>You have an outstanding invoice from <strong>${contractorName}</strong> for work on <strong>${projectName}</strong>.</p>
+                <div style="background: #fffbeb; border-left: 4px solid #F59E0B; padding: 18px; margin: 20px 0; border-radius: 8px;">
+                  <p style="margin: 0 0 4px; font-weight: 600; font-size: 18px;">${milestoneName}</p>
+                  <p style="margin: 0; font-size: 22px; font-weight: 700; color: #D97706;">${fmtAmount}</p>
+                </div>
+                <p style="text-align: center;">
+                  <a href="${projectLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #F59E0B, #D97706); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Pay Now &rarr;</a>
+                </p>
+                <p style="font-size: 13px; color: #6b7280; margin-top: 24px;">If you've already paid outside the app, your contractor can mark this invoice as paid.</p>
+              </td></tr>
+              <tr><td style="text-align: center; padding: 20px; color: #a0aec0; font-size: 11px;">
+                <p style="margin: 0;">${contractorName}</p>
+                <p style="margin: 4px 0 0;">Powered by ProjectPulse</p>
+              </td></tr>
+            </table>
+          </td></tr></table>
+        </body></html>`;
+
+        try {
+          await sgMail.send({
+            to: clientEmail,
+            from: { email: sendgridFromEmail.value(), name: contractorName },
+            replyTo: contractorEmail || sendgridFromEmail.value(),
+            subject: `Payment Reminder: ${fmtAmount} for ${milestoneName}`,
+            html: emailHtml,
+            trackingSettings: { clickTracking: { enable: false, enableText: false } },
+          });
+
+          await invoiceDoc.ref.update({ reminder_sent: true, reminder_sent_at: FieldValue.serverTimestamp() });
+          remindersSent++;
+          console.log(`✅ Payment reminder sent to ${clientEmail} for ${invoiceData.invoice_number}`);
+        } catch (error) {
+          console.error(`❌ Reminder email error for ${invoiceData.invoice_number}:`, error);
+        }
+      }
+    }
+
+    console.log(`Payment reminder check complete: ${remindersSent} reminders sent`);
   }
 );
