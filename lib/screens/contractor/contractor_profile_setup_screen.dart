@@ -15,6 +15,7 @@ class _ContractorProfileSetupScreenState
   final _businessNameController = TextEditingController();
   final _ownerNameController = TextEditingController();
   final _phoneController = TextEditingController();
+  bool _isSolo = false;
 
   @override
   void dispose() {
@@ -30,6 +31,7 @@ class _ContractorProfileSetupScreenState
         'business_name': _businessNameController.text.trim(),
         'owner_name': _ownerNameController.text.trim(),
         'phone': _phoneController.text.trim(),
+        'is_solo': _isSolo ? 'true' : 'false',
       });
     }
   }
@@ -116,6 +118,59 @@ class _ContractorProfileSetupScreenState
                   fillColor: Colors.grey[50],
                 ),
                 keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 20),
+
+              // Solo contractor toggle
+              InkWell(
+                onTap: () => setState(() => _isSolo = !_isSolo),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: _isSolo ? Colors.blue[50] : Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _isSolo ? Colors.blue[300]! : Colors.grey[300]!,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isSolo ? Icons.person : Icons.groups,
+                        color: _isSolo ? Colors.blue[700] : Colors.grey[600],
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'I work solo',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                color: _isSolo ? Colors.blue[800] : Colors.grey[800],
+                              ),
+                            ),
+                            Text(
+                              _isSolo
+                                  ? 'Simplified view — no crew features'
+                                  : 'Toggle if you don\'t have a crew',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _isSolo,
+                        onChanged: (v) => setState(() => _isSolo = v),
+                        activeColor: Colors.blue[600],
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 32),
 

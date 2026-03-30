@@ -802,6 +802,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
           });
 
           // Save user with contractor profile + team reference
+          final isSolo = profileData['is_solo'] == 'true';
           await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
             'user_id': user.uid,
             'email': user.email,
@@ -811,6 +812,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               'business_name': businessName,
               'owner_name': ownerName,
               'phone': profileData['phone'] ?? '',
+              'is_solo': isSolo,
               'specialties': [],
               'rating_average': 0.0,
               'total_reviews': 0,
