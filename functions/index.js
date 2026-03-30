@@ -1339,17 +1339,21 @@ exports.createCheckoutSession = onRequest(
         cancel_url: `https://projectpulsehub.com/payment-cancelled`,
       });
 
-      // Save session ID to invoice
-      await getFirestore()
-        .collection('projects')
-        .doc(projectId)
-        .collection('invoices')
-        .doc(invoiceId)
-        .update({
-          'stripe_session_id': session.id,
-          'stripe_checkout_url': session.url,
-          'processing_fee': processingFee,
-        });
+      // Save session ID to invoice (non-blocking — don't fail if invoice doc missing)
+      try {
+        await getFirestore()
+          .collection('projects')
+          .doc(projectId)
+          .collection('invoices')
+          .doc(invoiceId)
+          .update({
+            'stripe_session_id': session.id,
+            'stripe_checkout_url': session.url,
+            'processing_fee': processingFee,
+          });
+      } catch (updateErr) {
+        console.log('⚠️ Could not update invoice doc (may not exist yet):', updateErr.message);
+      }
 
       console.log(`✅ Checkout session created: ${session.id} for invoice ${invoiceId}`);
       res.json({ url: session.url, sessionId: session.id });
