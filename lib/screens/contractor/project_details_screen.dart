@@ -1329,22 +1329,26 @@ Looking forward to working with you!
   }
 
   Future<void> _exportInvoicesCsv(List<QueryDocumentSnapshot> invoices) async {
+    final clientName = widget.projectData['client_name'] as String? ?? '';
     final rows = <List<String>>[
-      ['Invoice #', 'Milestone', 'Amount', 'Fee', 'Total Due', 'Status', 'Created', 'Paid Date'],
+      ['Invoice #', 'Date', 'Customer', 'Milestone', 'Amount', 'Status', 'Payment Method', 'Reference', 'Paid Date'],
     ];
 
     for (final doc in invoices) {
       final data = doc.data() as Map<String, dynamic>;
       final createdAt = (data['created_at'] as Timestamp?)?.toDate();
       final paidAt = (data['paid_at'] as Timestamp?)?.toDate();
+      final method = data['payment_method'] as String? ?? '';
+      final reference = data['payment_reference'] as String? ?? '';
       rows.add([
         data['invoice_number'] as String? ?? '',
+        createdAt != null ? DateFormat('MM/dd/yyyy').format(createdAt) : '',
+        clientName,
         data['milestone_name'] as String? ?? '',
         (data['amount'] as num?)?.toStringAsFixed(2) ?? '0.00',
-        (data['transaction_fee'] as num?)?.toStringAsFixed(2) ?? '0.00',
-        (data['total_due'] as num?)?.toStringAsFixed(2) ?? '0.00',
         data['status'] as String? ?? 'sent',
-        createdAt != null ? DateFormat('MM/dd/yyyy').format(createdAt) : '',
+        method,
+        reference,
         paidAt != null ? DateFormat('MM/dd/yyyy').format(paidAt) : '',
       ]);
     }
@@ -1358,6 +1362,112 @@ Looking forward to working with you!
       [XFile(file.path)],
       subject: 'Invoice Report - ${widget.projectData['project_name'] ?? 'Project'}',
     );
+  }
+
+  Future<Map<String, dynamic>?> _showPaymentMethodPicker(BuildContext context, String invoiceNumber) async {
+    String selectedMethod = 'zelle';
+    final refController = TextEditingController();
+
+    const methods = [
+      ('zelle', 'Zelle', Icons.account_balance),
+      ('check', 'Check', Icons.receipt_long),
+      ('venmo', 'Venmo', Icons.phone_iphone),
+      ('cashapp', 'Cash App', Icons.attach_money),
+      ('cash', 'Cash', Icons.payments),
+      ('other', 'Other', Icons.more_horiz),
+    ];
+
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Mark as Paid', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  Text(invoiceNumber, style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+                  const SizedBox(height: 16),
+                  Text('How was this paid?', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: methods.map((m) {
+                      final isSelected = selectedMethod == m.$1;
+                      return ChoiceChip(
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(m.$3, size: 16, color: isSelected ? Colors.white : Colors.grey[700]),
+                            const SizedBox(width: 4),
+                            Text(m.$2),
+                          ],
+                        ),
+                        selected: isSelected,
+                        onSelected: (_) => setSheetState(() => selectedMethod = m.$1),
+                        selectedColor: const Color(0xFF2D3748),
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.grey[800],
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: refController,
+                    decoration: InputDecoration(
+                      labelText: 'Reference # (optional)',
+                      hintText: selectedMethod == 'check' ? 'Check number' : 'Transaction ID',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, {
+                        'method': selectedMethod,
+                        'reference': refController.text.trim().isNotEmpty ? refController.text.trim() : null,
+                      }),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[600],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Confirm Payment', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    refController.dispose();
+    return result;
   }
 
   Widget _buildInvoicesTab() {
@@ -1422,7 +1532,7 @@ Looking forward to working with you!
             final invoiceId = invoices[index - 1].id;
             final status = data['status'] as String? ?? 'sent';
             final amount = (data['amount'] as num?)?.toDouble() ?? 0;
-            final totalDue = (data['total_due'] as num?)?.toDouble() ?? amount;
+            final totalDue = amount; // Fee only applied at Stripe Checkout
             final milestoneName = data['milestone_name'] as String? ?? '';
             final invoiceNumber = data['invoice_number'] as String? ?? '';
             final createdAt = (data['created_at'] as Timestamp?)?.toDate();
@@ -1549,26 +1659,14 @@ Looking forward to working with you!
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: () async {
-                                final confirmed = await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text('Mark as Paid?'),
-                                    content: Text('Mark invoice $invoiceNumber as paid?'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(ctx, false),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      ElevatedButton(
-                                        onPressed: () => Navigator.pop(ctx, true),
-                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                        child: const Text('Mark Paid'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                                if (confirmed == true) {
-                                  await InvoiceService.markAsPaid(widget.projectId, invoiceId);
+                                final result = await _showPaymentMethodPicker(context, invoiceNumber);
+                                if (result != null) {
+                                  await InvoiceService.markAsPaid(
+                                    widget.projectId,
+                                    invoiceId,
+                                    paymentMethod: result['method'] as String,
+                                    paymentReference: result['reference'] as String?,
+                                  );
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(content: Text('Invoice marked as paid!'), backgroundColor: Colors.green),

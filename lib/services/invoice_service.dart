@@ -18,9 +18,7 @@ class InvoiceService {
     required double milestoneAmount,
     required Map<String, dynamic> projectData,
   }) async {
-    // Payment processing fee: flat 5% (Stripe ~4% + ProjectPulse 1%)
-    final fee = (milestoneAmount * 0.05);
-    final totalDue = milestoneAmount + fee;
+    // No fee baked into invoice — fee only applied at Stripe Checkout time
     final invoiceNumber =
         'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
 
@@ -34,8 +32,8 @@ class InvoiceService {
       clientEmail: projectData['client_email'] as String? ?? '',
       milestoneName: milestoneName,
       milestoneAmount: milestoneAmount,
-      fee: fee,
-      totalDue: totalDue,
+      fee: 0,
+      totalDue: milestoneAmount,
     );
 
     // Upload to Firebase Storage
@@ -55,8 +53,6 @@ class InvoiceService {
       'milestone_id': milestoneId,
       'milestone_name': milestoneName,
       'amount': milestoneAmount,
-      'transaction_fee': fee,
-      'total_due': totalDue,
       'status': 'sent',
       'pdf_url': pdfUrl,
       'created_at': FieldValue.serverTimestamp(),
@@ -71,7 +67,6 @@ class InvoiceService {
         .doc(milestoneId)
         .update({
       'released_amount': milestoneAmount,
-      'transaction_fee': fee,
       'released_at': FieldValue.serverTimestamp(),
     });
 
@@ -364,17 +359,25 @@ class InvoiceService {
     return pdf.save();
   }
 
-  /// Mark an invoice as paid
+  /// Mark an invoice as paid with payment method tracking
   static Future<void> markAsPaid(
-      String projectId, String invoiceId) async {
+      String projectId, String invoiceId, {
+      String paymentMethod = 'other',
+      String? paymentReference,
+  }) async {
+    final updates = <String, dynamic>{
+      'status': 'paid',
+      'paid_at': FieldValue.serverTimestamp(),
+      'payment_method': paymentMethod,
+    };
+    if (paymentReference != null) {
+      updates['payment_reference'] = paymentReference;
+    }
     await FirebaseFirestore.instance
         .collection('projects')
         .doc(projectId)
         .collection('invoices')
         .doc(invoiceId)
-        .update({
-      'status': 'paid',
-      'paid_at': FieldValue.serverTimestamp(),
-    });
+        .update(updates);
   }
 }

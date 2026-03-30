@@ -1635,7 +1635,7 @@ class _ContractorProjectsScreenState
       double projCollected = 0, projOutstanding = 0;
       for (final inv in invoiceSnap.docs) {
         final invData = inv.data();
-        final amount = ((invData['amount'] ?? invData['total_due'] ?? 0) as num).toDouble();
+        final amount = ((invData['amount'] ?? 0) as num).toDouble();
         if (invData['status'] == 'paid') {
           projCollected += amount;
         } else {

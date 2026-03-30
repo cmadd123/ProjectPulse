@@ -490,7 +490,7 @@ class ExpensesTabWidget extends StatelessWidget {
 
     await Share.shareXFiles(
       [XFile(file.path)],
-      subject: 'Expense Report',
+      subject: 'Expense Report — $projectId',
     );
   }
 
