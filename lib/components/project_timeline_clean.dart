@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../backend/schema/milestone_record.dart';
 import '../screens/contractor/create_milestones_screen.dart';
 import '../services/notification_service.dart';
+import 'segmented_progress_bar.dart';
 import 'change_type_selector_bottom_sheet.dart';
 
 /// Clean milestone timeline matching home page aesthetic
@@ -268,36 +269,13 @@ class _ProjectTimelineCleanState extends State<ProjectTimelineClean> {
               ],
             ),
           ),
-          // Segmented progress bar at bottom (GC only)
-          if (widget.userRole == 'contractor' && milestones.isNotEmpty) ...[
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-              ),
-              child: Row(
-                children: milestones.map((milestone) {
-                  Color segmentColor;
-                  switch (milestone.status) {
-                    case 'approved':
-                      segmentColor = Colors.green;
-                      break;
-                    case 'in_progress':
-                      segmentColor = Colors.blue;
-                      break;
-                    case 'awaiting_approval':
-                      segmentColor = Colors.orange;
-                      break;
-                    default: // 'not_started'
-                      segmentColor = Colors.grey[300]!;
-                  }
-                  return Expanded(
-                    child: Container(
-                      height: 6,
-                      color: segmentColor,
-                    ),
-                  );
-                }).toList(),
+          // Segmented progress bar at bottom
+          if (milestones.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              child: SegmentedProgressBar(
+                statuses: milestones.map((m) => m.status).toList(),
+                showLegend: true,
               ),
             ),
           ],

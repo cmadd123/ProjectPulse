@@ -7,6 +7,8 @@ import '../../services/notification_service.dart';
 import '../../services/connectivity_service.dart';
 import '../../services/invoice_service.dart';
 import '../../services/stripe_service.dart';
+import '../../components/segmented_progress_bar.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../main.dart' show navigatorKey;
 
 /// Design 3: Personality Injection (Polished Current)
@@ -718,7 +720,12 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
                   color: Colors.grey[600],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
+              SegmentedProgressBar(
+                statuses: milestones.map((m) => m.status).toList(),
+                showLegend: true,
+              ),
+              const SizedBox(height: 10),
               _buildDayCounter(),
             ],
           );
@@ -1462,14 +1469,35 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
           const SizedBox(height: 16),
           Row(
             children: [
+              if ((widget.projectData['contractor_phone'] as String? ?? '').isNotEmpty) ...[
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final phone = widget.projectData['contractor_phone'] as String;
+                      launchUrl(Uri.parse('tel:$phone'));
+                    },
+                    icon: const Icon(Icons.phone, size: 16),
+                    label: const Text('Call'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2D3748),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => widget.onTabSwitch(2), // Go to Chat tab
-                  icon: const Icon(Icons.message, size: 18),
+                  onPressed: () => widget.onTabSwitch(2),
+                  icon: const Icon(Icons.message, size: 16),
                   label: const Text('Message'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.brandColor,
+                    backgroundColor: const Color(0xFF10B981),
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),

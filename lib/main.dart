@@ -9,7 +9,7 @@ import 'package:rxdart/rxdart.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import 'utils/auth_utils.dart';
-// import 'dev/dev_tools_overlay.dart'; // Removed for production
+import 'dev/dev_tools_overlay.dart'; // Temporarily re-enabled for testing
 import 'screens/contractor/contractor_profile_screen.dart';
 import 'screens/contractor/contractor_profile_setup_screen.dart';
 import 'screens/contractor/create_project_screen.dart';
@@ -28,6 +28,7 @@ import 'services/connectivity_service.dart';
 import 'screens/shared/notification_center_screen.dart';
 import 'data/demo_project_data.dart';
 import 'components/skeleton_loader.dart';
+import 'components/segmented_progress_bar.dart';
 // import 'screens/dev/email_preview_screen.dart'; // Removed for production
 import 'screens/subcontractor/subcontractor_home_screen.dart';
 import 'screens/client/preview_home_design3.dart';
@@ -461,11 +462,21 @@ class _RoleDetectionScreenState extends State<RoleDetectionScreen> {
           final role = data?['role'] as String?;
 
           if (role == 'contractor') {
-            return const ContractorHomeScreen();
+            return DevToolsOverlay(
+              firestoreRole: 'contractor',
+              currentRole: 'contractor',
+              onToggleRole: () {},
+              child: const ContractorHomeScreen(),
+            );
           } else if (role == 'team_member') {
             return const TeamMemberHomeScreen();
           } else if (role == 'client') {
-            return const ClientDashboardScreen();
+            return DevToolsOverlay(
+              firestoreRole: 'client',
+              currentRole: 'client',
+              onToggleRole: () {},
+              child: const ClientDashboardScreen(),
+            );
           } else if (role == 'subcontractor') {
             return const SubcontractorHomeScreen();
           }
@@ -2722,25 +2733,9 @@ class _ContractorProjectsScreenState
                               // Segmented progress bar
                               if (totalCount > 0) ...[
                                 const SizedBox(height: 8),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Row(
-                                    children: [
-                                      for (var milestone in milestones)
-                                        Expanded(
-                                          child: Container(
-                                            height: 4,
-                                            color: () {
-                                              final status = (milestone.data() as Map)['status'];
-                                              if (status == 'approved') return Colors.green;
-                                              if (status == 'awaiting_approval') return Colors.orange;
-                                              if (status == 'in_progress') return Colors.blue;
-                                              return Colors.grey[300];
-                                            }(),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                                SegmentedProgressBar(
+                                  statuses: milestones.map((m) => (m.data() as Map)['status'] as String? ?? 'pending').toList(),
+                                  height: 6,
                                 ),
                                 const SizedBox(height: 4),
                                 Row(

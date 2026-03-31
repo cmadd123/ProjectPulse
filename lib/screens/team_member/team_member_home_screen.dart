@@ -6,6 +6,7 @@ import '../../utils/auth_utils.dart';
 import 'team_member_project_screen.dart';
 import '../contractor/schedule_screen.dart';
 import '../shared/notification_center_screen.dart';
+import '../../components/segmented_progress_bar.dart';
 
 class TeamMemberHomeScreen extends StatelessWidget {
   const TeamMemberHomeScreen({super.key});
@@ -1121,40 +1122,10 @@ class _TeamMemberDashboardState extends State<_TeamMemberDashboard> {
                         ],
                         if (totalCount > 0) ...[
                           const SizedBox(height: 14),
-                          // Segmented progress bar — each milestone colored by status
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: SizedBox(
-                              height: 6,
-                              child: Row(
-                                children: milestones.asMap().entries.map((entry) {
-                                  final i = entry.key;
-                                  final mData = entry.value.data() as Map<String, dynamic>;
-                                  final mStatus = mData['status'] as String? ?? 'pending';
-                                  Color color;
-                                  switch (mStatus) {
-                                    case 'approved':
-                                      color = const Color(0xFF10B981);
-                                      break;
-                                    case 'in_progress':
-                                      color = const Color(0xFF3B82F6);
-                                      break;
-                                    case 'awaiting_approval':
-                                      color = const Color(0xFFF59E0B);
-                                      break;
-                                    default:
-                                      color = Colors.grey[300]!;
-                                  }
-                                  return Expanded(
-                                    child: Container(
-                                      margin: EdgeInsets.only(
-                                          right: i < totalCount - 1 ? 2 : 0),
-                                      color: color,
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ),
+                          // Segmented progress bar
+                          SegmentedProgressBar(
+                            statuses: milestones.map((m) => (m.data() as Map<String, dynamic>)['status'] as String? ?? 'pending').toList(),
+                            height: 6,
                           ),
                           const SizedBox(height: 6),
                           Text(
