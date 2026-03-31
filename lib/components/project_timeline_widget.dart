@@ -241,7 +241,7 @@ class ProjectTimelineWidget extends StatelessWidget {
                     }
                   },
                   icon: const Icon(Icons.credit_card, size: 20),
-                  label: Text('Pay Online ${currencyFmt.format(milestoneAmount)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  label: Text('Pay with Card ${currencyFmt.format(milestoneAmount)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[600], foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -250,7 +250,7 @@ class ProjectTimelineWidget extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              Text('Card or bank transfer · small processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              Text('Card, bank transfer, or Google Pay · processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,

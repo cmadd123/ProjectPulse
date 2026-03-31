@@ -1320,11 +1320,12 @@ exports.createPaymentIntent = onRequest(
         );
       }
 
-      // Create PaymentIntent
+      // Create PaymentIntent with specific payment methods
       const paymentIntent = await stripe.paymentIntents.create({
         amount: totalChargeCents,
         currency: 'usd',
         customer: customerId || undefined,
+        payment_method_types: ['card', 'us_bank_account', 'link'],
         metadata: {
           projectId,
           invoiceId,
@@ -1333,7 +1334,6 @@ exports.createPaymentIntent = onRequest(
           platformFeePercent: platformFeePercent.toString(),
           milestoneName: milestoneName || '',
         },
-        automatic_payment_methods: { enabled: true },
       });
 
       // Save to invoice doc (non-blocking)
