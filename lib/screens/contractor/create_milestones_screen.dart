@@ -225,14 +225,18 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
               ),
             )
           else
-            TextButton(
-              onPressed: isValid ? _saveMilestones : null,
-              child: Text(
-                'Save',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: isValid ? Colors.white : Colors.white.withOpacity(0.5),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ElevatedButton(
+                onPressed: isValid ? _saveMilestones : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isValid ? Colors.white : Colors.white.withOpacity(0.3),
+                  foregroundColor: Theme.of(context).colorScheme.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
                 ),
+                child: const Text('Save', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
               ),
             ),
         ],

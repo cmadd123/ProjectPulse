@@ -32,15 +32,20 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
   bool _welcomeMessageDismissed = false;
 
   Future<void> _approveMilestone(String milestoneId, String milestoneName, double milestoneAmount) async {
+    // Capture context before any async work — widget may rebuild
+    final navContext = context;
+    final projectId = widget.projectId;
+    final projectData = Map<String, dynamic>.from(widget.projectData);
+
     try {
-      await MilestoneRecord.updateMilestone(widget.projectId, milestoneId, {
+      await MilestoneRecord.updateMilestone(projectId, milestoneId, {
         'status': 'approved',
         'approved_at': FieldValue.serverTimestamp(),
       });
 
-      final projectName = widget.projectData['project_name'] as String? ?? 'Project';
+      final projectName = projectData['project_name'] as String? ?? 'Project';
       NotificationService.sendMilestoneApprovedNotification(
-        projectId: widget.projectId,
+        projectId: projectId,
         projectName: projectName,
         milestoneName: milestoneName,
       );
@@ -49,27 +54,23 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
       String? invoiceId;
       try {
         invoiceId = await InvoiceService.generateAndSave(
-          projectId: widget.projectId,
+          projectId: projectId,
           milestoneId: milestoneId,
           milestoneName: milestoneName,
           milestoneAmount: milestoneAmount,
-          projectData: widget.projectData,
+          projectData: projectData,
         );
       } catch (invoiceErr) {
         debugPrint('Invoice generation failed: $invoiceErr');
       }
 
-      if (mounted) {
-        ConnectivityService.showOfflineWriteFeedback(context);
-        // Show payment dialog after a short delay so rebuild completes
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted) {
-          _showPaymentDialog(milestoneName, milestoneAmount, invoiceId);
-        }
+      // Show payment dialog using root navigator so it survives widget rebuilds
+      if (navContext.mounted) {
+        _showPaymentDialog(milestoneName, milestoneAmount, invoiceId);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (navContext.mounted) {
+        ScaffoldMessenger.of(navContext).showSnackBar(
           SnackBar(content: Text('Error: $e')),
         );
       }

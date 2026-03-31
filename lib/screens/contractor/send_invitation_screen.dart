@@ -521,7 +521,6 @@ Looking forward to working with you!''';
             if (!_invitationSent)
               SizedBox(
                 width: double.infinity,
-                height: 56,
                 child: ElevatedButton.icon(
                   onPressed: _isSending ? null : _sendInvitation,
                   icon: _isSending
@@ -544,6 +543,7 @@ Looking forward to working with you!''';
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -737,6 +737,7 @@ Looking forward to working with you!''';
                   child: const Text('Skip for now'),
                 ),
               ),
+            const SizedBox(height: 32),
           ],
         ),
       ),
