@@ -7,6 +7,7 @@ import '../backend/schema/milestone_update_record.dart';
 import '../services/notification_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/invoice_service.dart';
+import '../services/stripe_service.dart';
 import '../screens/contractor/create_milestones_screen.dart';
 import 'add_milestone_update_bottom_sheet.dart';
 import 'reply_to_update_bottom_sheet.dart';
@@ -166,6 +167,108 @@ class ProjectTimelineWidget extends StatelessWidget {
     }
   }
 
+  void _showPaymentOptions(BuildContext context, String milestoneName, double milestoneAmount, String milestoneId) {
+    final currencyFmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    final contractorName = projectData['contractor_business_name'] as String? ?? '';
+    final clientEmail = projectData['client_email'] as String?;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: Colors.green[50], shape: BoxShape.circle),
+                child: Icon(Icons.check, color: Colors.green[700], size: 32),
+              ),
+              const SizedBox(height: 12),
+              const Text('Milestone Approved!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(milestoneName, style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50], borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Amount Due', style: TextStyle(fontSize: 14)),
+                    Text(currencyFmt.format(milestoneAmount), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    // Find the invoice for this milestone
+                    final invoices = await FirebaseFirestore.instance
+                        .collection('projects').doc(projectId)
+                        .collection('invoices')
+                        .where('milestone_id', isEqualTo: milestoneId)
+                        .get();
+                    final invoiceId = invoices.docs.isNotEmpty ? invoices.docs.first.id : null;
+                    if (invoiceId != null) {
+                      await StripeService.openCheckout(
+                        projectId: projectId,
+                        invoiceId: invoiceId,
+                        amount: milestoneAmount,
+                        milestoneName: milestoneName,
+                        clientEmail: clientEmail,
+                        contractorName: contractorName,
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.credit_card, size: 20),
+                  label: Text('Pay Online ${currencyFmt.format(milestoneAmount)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[600], foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text('Card or bank transfer · small processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Pay $contractorName directly via Zelle, Venmo, or check. They\'ll mark it as paid.'),
+                        duration: const Duration(seconds: 5),
+                      ),
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Pay Another Way', style: TextStyle(fontSize: 14)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _approveMilestone(BuildContext context, String milestoneId, String milestoneName, double milestoneAmount) async {
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
@@ -261,20 +364,8 @@ class ProjectTimelineWidget extends StatelessWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('✓ Payment approved! Contractor notified.'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: 'Done',
-              textColor: Colors.white,
-              onPressed: () {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              },
-            ),
-          ),
-        );
+        // Show payment dialog
+        _showPaymentOptions(context, milestoneName, milestoneAmount, milestoneId);
       }
     } catch (e, stackTrace) {
       debugPrint('Milestone approval error: $e');

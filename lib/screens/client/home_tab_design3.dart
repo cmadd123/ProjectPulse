@@ -926,7 +926,7 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
             .fold<double>(0, (sum, d) => sum + ((d.data() as Map<String, dynamic>)['amount'] as num? ?? 0).toDouble());
         final outstandingTotal = invoices
             .where((d) => (d.data() as Map<String, dynamic>)['status'] != 'paid')
-            .fold<double>(0, (sum, d) => sum + ((d.data() as Map<String, dynamic>)['total_due'] as num? ?? 0).toDouble());
+            .fold<double>(0, (sum, d) => sum + ((d.data() as Map<String, dynamic>)['amount'] as num? ?? 0).toDouble());
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -939,7 +939,7 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
             ...invoices.map((doc) {
               final data = doc.data() as Map<String, dynamic>;
               final name = data['milestone_name'] as String? ?? '';
-              final amount = (data['total_due'] as num?)?.toDouble() ?? 0;
+              final amount = (data['amount'] as num?)?.toDouble() ?? 0;
               final isPaid = data['status'] == 'paid';
               return Padding(
                 padding: const EdgeInsets.only(bottom: 6),
