@@ -26,6 +26,9 @@ import '../../components/time_tab_widget.dart';
 import '../../components/profitability_tab_widget.dart';
 import 'project_team_screen.dart';
 import '../client/client_project_timeline.dart';
+import '../client/home_tab_design3.dart';
+import '../shared/project_chat_design3.dart';
+import '../client/enhanced_photo_timeline.dart';
 import '../../services/invoice_service.dart';
 import 'debug_tools_screen.dart';
 import '../../components/client_changes_activity_widget.dart';
@@ -1724,10 +1727,9 @@ Looking forward to working with you!
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => ClientProjectTimeline(
+                    builder: (_) => _ClientPreviewShell(
                       projectId: widget.projectId,
                       projectData: widget.projectData,
-                      isPreview: true,
                     ),
                   ),
                 );
@@ -2491,6 +2493,107 @@ Looking forward to working with you!
             foregroundColor: Colors.white,
             child: const Icon(Icons.photo_library),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Wraps the real client widgets in a preview shell
+/// so the GC sees exactly what the client sees
+class _ClientPreviewShell extends StatefulWidget {
+  final String projectId;
+  final Map<String, dynamic> projectData;
+
+  const _ClientPreviewShell({required this.projectId, required this.projectData});
+
+  @override
+  State<_ClientPreviewShell> createState() => _ClientPreviewShellState();
+}
+
+class _ClientPreviewShellState extends State<_ClientPreviewShell> {
+  int _tabIndex = 0;
+
+  Color get _brandColor {
+    final hex = widget.projectData['brand_color'] as String?;
+    if (hex != null && hex.isNotEmpty) {
+      try { return Color(int.parse(hex.replaceFirst('#', '0xFF'))); } catch (_) {}
+    }
+    return const Color(0xFFFF6B35);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final projectName = widget.projectData['project_name'] as String? ?? 'Project';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(projectName),
+        backgroundColor: const Color(0xFF2D3748),
+        foregroundColor: Colors.white,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(28),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            color: Colors.amber[100],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.visibility, size: 14, color: Colors.amber[900]),
+                const SizedBox(width: 6),
+                Text('Preview — This is what your client sees',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.amber[900])),
+              ],
+            ),
+          ),
+        ),
+      ),
+      body: IndexedStack(
+        index: _tabIndex,
+        children: [
+          // Home
+          HomeTabDesign3(
+            projectId: widget.projectId,
+            projectData: widget.projectData,
+            brandColor: _brandColor,
+            onTabSwitch: (i) => setState(() => _tabIndex = i),
+          ),
+          // Photos
+          EnhancedPhotoTimeline(
+            projectId: widget.projectId,
+            projectData: widget.projectData,
+          ),
+          // Chat
+          ProjectChatDesign3(
+            projectId: widget.projectId,
+            projectName: projectName,
+            isContractor: false,
+            embedded: true,
+            emptyStateHint: 'Messages will appear here',
+            inputHint: 'Preview only',
+          ),
+          // Milestones
+          ProjectTimelineClean(
+            projectId: widget.projectId,
+            projectData: widget.projectData,
+            userRole: 'client',
+          ),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _tabIndex,
+        onTap: (i) => setState(() => _tabIndex = i),
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: _brandColor,
+        unselectedItemColor: Colors.grey[500],
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.photo_library), label: 'Photos'),
+          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
+          BottomNavigationBarItem(icon: Icon(Icons.flag), label: 'Milestones'),
         ],
       ),
     );
