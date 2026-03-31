@@ -250,7 +250,7 @@ class ProjectTimelineWidget extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              Text('Card, bank transfer, or Google Pay · processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              Text('Card, bank transfer, or wallet · processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -842,7 +842,7 @@ class ProjectTimelineWidget extends StatelessWidget {
                         child: ElevatedButton.icon(
                           onPressed: () => _approveMilestone(context, milestone.milestoneId, milestone.name, milestone.amount),
                           icon: const Icon(Icons.check, size: 18),
-                          label: const Text('Approve'),
+                          label: const Text('Approve & Pay'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
                             foregroundColor: Colors.white,

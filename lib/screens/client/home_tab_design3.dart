@@ -151,7 +151,7 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
                 ),
               ),
               const SizedBox(height: 6),
-              Text('Card, bank transfer, or Google Pay · processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              Text('Card, bank transfer, or wallet · processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -247,7 +247,7 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
                 ),
               ),
               const SizedBox(height: 6),
-              Text('Card, bank transfer, or Google Pay · processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              Text('Card, bank transfer, or wallet · processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
               const SizedBox(height: 12),
               // Pay Another Way
               SizedBox(
@@ -693,44 +693,19 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            '👉 Tap to review photos and approve',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[700],
-              fontWeight: FontWeight.w500,
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => widget.onTabSwitch(3), // Go to Milestones tab to review work
+              icon: const Icon(Icons.visibility, size: 18),
+              label: const Text('Review & Approve', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green[600],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => widget.onTabSwitch(1), // Go to Photos tab to review work
-                  child: const Text('View Details'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => _approveMilestone(doc.id, name, amount),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[600],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.check, size: 18),
-                      const SizedBox(width: 4),
-                      const Text('Approve'),
-                    ],
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),
