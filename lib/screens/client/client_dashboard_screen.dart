@@ -24,6 +24,7 @@ import '../shared/notification_center_screen.dart';
 import '../../components/skeleton_loader.dart';
 import 'design_preview_menu.dart';
 import 'home_tab_design3.dart';
+import 'client_onboarding.dart';
 
 class ClientDashboardScreen extends StatefulWidget {
   const ClientDashboardScreen({super.key});
@@ -43,6 +44,10 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   StreamSubscription? _coSub;
   StreamSubscription? _chatSub;
   StreamSubscription? _brandingSub;
+
+  // Onboarding
+  bool _showOnboarding = false;
+  bool _onboardingChecked = false;
 
   // Contractor branding
   String? _contractorLogoUrl;
@@ -206,10 +211,39 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     return _brandColor.computeLuminance() > 0.5 ? Colors.black : Colors.white;
   }
 
+  Future<void> _checkOnboarding() async {
+    if (_onboardingChecked) return;
+    _onboardingChecked = true;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final seen = doc.data()?['client_onboarding_seen'] == true;
+    if (!seen && mounted) {
+      setState(() => _showOnboarding = true);
+    }
+  }
+
+  Future<void> _completeOnboarding() async {
+    setState(() => _showOnboarding = false);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+        'client_onboarding_seen': true,
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
     DebugConsole().log('🔍 CLIENT DASHBOARD BUILD - selectedProject: ${_selectedProjectId ?? "null"}');
+
+    // Check onboarding on first build
+    _checkOnboarding();
+
+    if (_showOnboarding) {
+      return ClientOnboarding(onComplete: _completeOnboarding);
+    }
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance

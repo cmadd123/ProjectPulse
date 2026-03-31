@@ -182,74 +182,40 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
 
       if (!mounted) return;
 
-      // Ask if user wants to add milestones
+      // Show next steps checklist
+      if (!mounted) return;
+
       bool milestonesResult = false;
-      final addMilestones = await showDialog<bool>(
+      bool invitationSent = false;
+
+      await showModalBottomSheet(
         context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Project Created!'),
-          content: const Text('Would you like to set up milestones now? You can always add them later.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text("I'll add later"),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Add Milestones'),
-            ),
-          ],
+        isDismissible: false,
+        enableDrag: false,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => _ProjectChecklist(
+          projectId: projectDoc.id,
+          projectName: _projectNameController.text.trim(),
+          projectCost: projectCost,
+          clientName: _clientNameController.text.trim(),
+          clientEmail: _clientEmailController.text.trim(),
+          contractorName: contractorBusinessName,
+          onMilestonesAdded: () => milestonesResult = true,
+          onInvitationSent: () => invitationSent = true,
         ),
       );
 
-      if (addMilestones == true && mounted) {
-        milestonesResult = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CreateMilestonesScreen(
-              projectId: projectDoc.id,
-              projectAmount: projectCost,
-            ),
-          ),
-        ) == true;
-      }
-
-      if (!mounted) return;
-
-      // Navigate to SendInvitationScreen to show email preview
-      final invitationSent = await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(
-          builder: (context) => SendInvitationScreen(
-            projectId: projectDoc.id,
-            projectName: _projectNameController.text.trim(),
-            clientName: _clientNameController.text.trim(),
-            clientEmail: _clientEmailController.text.trim(),
-            contractorName: contractorBusinessName,
-          ),
-        ),
-      ) ?? false;
-
-      // Go back to contractor home
       if (mounted) {
         Navigator.pop(context, true);
 
         String message = 'Project created';
-        if (milestonesResult) {
-          message += ' with milestones';
-        }
-        if (invitationSent) {
-          message += ' and invitation sent';
-        }
+        if (milestonesResult) message += ' with milestones';
+        if (invitationSent) message += ' and invitation sent';
         message += '!';
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+          SnackBar(content: Text(message), backgroundColor: const Color(0xFF10B981)),
         );
       }
     } catch (e) {
@@ -705,6 +671,193 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Post-create checklist showing next steps
+class _ProjectChecklist extends StatefulWidget {
+  final String projectId;
+  final String projectName;
+  final double projectCost;
+  final String clientName;
+  final String clientEmail;
+  final String contractorName;
+  final VoidCallback onMilestonesAdded;
+  final VoidCallback onInvitationSent;
+
+  const _ProjectChecklist({
+    required this.projectId,
+    required this.projectName,
+    required this.projectCost,
+    required this.clientName,
+    required this.clientEmail,
+    required this.contractorName,
+    required this.onMilestonesAdded,
+    required this.onInvitationSent,
+  });
+
+  @override
+  State<_ProjectChecklist> createState() => _ProjectChecklistState();
+}
+
+class _ProjectChecklistState extends State<_ProjectChecklist> {
+  bool _milestonesAdded = false;
+  bool _invitationSent = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Success icon
+          Container(
+            width: 56, height: 56,
+            decoration: BoxDecoration(color: Colors.green[50], shape: BoxShape.circle),
+            child: Icon(Icons.check, color: Colors.green[700], size: 32),
+          ),
+          const SizedBox(height: 12),
+          const Text('Project Created!', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(widget.projectName, style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+          const SizedBox(height: 24),
+
+          // Step 1: Add Milestones
+          _checklistItem(
+            done: _milestonesAdded,
+            icon: Icons.flag,
+            title: 'Add milestones',
+            subtitle: 'Break the project into phases for tracking and payments',
+            buttonText: 'Add Milestones',
+            onTap: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CreateMilestonesScreen(
+                    projectId: widget.projectId,
+                    projectAmount: widget.projectCost,
+                  ),
+                ),
+              );
+              if (result == true) {
+                setState(() => _milestonesAdded = true);
+                widget.onMilestonesAdded();
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+
+          // Step 2: Invite Client
+          _checklistItem(
+            done: _invitationSent,
+            icon: Icons.email,
+            title: 'Invite your client',
+            subtitle: '${widget.clientName} will get an email to join the project',
+            buttonText: 'Send Invitation',
+            onTap: () async {
+              final result = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SendInvitationScreen(
+                    projectId: widget.projectId,
+                    projectName: widget.projectName,
+                    clientName: widget.clientName,
+                    clientEmail: widget.clientEmail,
+                    contractorName: widget.contractorName,
+                  ),
+                ),
+              );
+              if (result == true) {
+                setState(() => _invitationSent = true);
+                widget.onInvitationSent();
+              }
+            },
+          ),
+          const SizedBox(height: 24),
+
+          // Done button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2D3748),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(
+                _milestonesAdded || _invitationSent ? 'Go to Dashboard' : 'Skip for Now',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (!_milestonesAdded && !_invitationSent)
+            Text('You can do these anytime from the project', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+        ],
+      ),
+    );
+  }
+
+  Widget _checklistItem({
+    required bool done,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String buttonText,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: done ? Colors.green[50] : Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: done ? Colors.green[200]! : Colors.grey[200]!),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(
+              color: done ? Colors.green[100] : Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: done ? Colors.green[300]! : Colors.grey[300]!),
+            ),
+            child: Icon(
+              done ? Icons.check : icon,
+              size: 20,
+              color: done ? Colors.green[700] : Colors.grey[600],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: done ? Colors.green[800] : const Color(0xFF2D3748),
+                  decoration: done ? TextDecoration.lineThrough : null,
+                )),
+                Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+              ],
+            ),
+          ),
+          if (!done)
+            TextButton(
+              onPressed: onTap,
+              child: Text(buttonText, style: const TextStyle(fontWeight: FontWeight.w600)),
+            ),
+        ],
       ),
     );
   }
