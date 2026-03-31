@@ -825,6 +825,174 @@ Looking forward to working with you!
   }
 
 
+  Widget _buildSystemLog() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('notifications')
+          .where('data.project_id', isEqualTo: widget.projectId)
+          .orderBy('created_at', descending: true)
+          .limit(20)
+          .snapshots(),
+      builder: (context, notifSnap) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('projects')
+              .doc(widget.projectId)
+              .collection('invoices')
+              .orderBy('created_at', descending: true)
+              .snapshots(),
+          builder: (context, invoiceSnap) {
+            final events = <Map<String, dynamic>>[];
+
+            // Notification events
+            for (final doc in notifSnap.data?.docs ?? []) {
+              final data = doc.data() as Map<String, dynamic>;
+              final type = data['type'] as String? ?? '';
+              final title = data['title'] as String? ?? '';
+              final body = data['body'] as String? ?? '';
+              final time = (data['created_at'] as Timestamp?)?.toDate();
+              final processed = data['processed'] == true;
+              final emailSent = data['email_sent'] == true;
+
+              if (time == null) continue;
+
+              // Notification sent
+              if (processed) {
+                events.add({
+                  'icon': '🔔',
+                  'text': 'Notification sent: $title',
+                  'time': time,
+                  'color': const Color(0xFF3B82F6),
+                });
+              }
+
+              // Email sent
+              if (emailSent) {
+                final emailTime = (data['email_sent_at'] as Timestamp?)?.toDate() ?? time;
+                events.add({
+                  'icon': '✉️',
+                  'text': 'Email sent: $title',
+                  'time': emailTime,
+                  'color': const Color(0xFF8B5CF6),
+                });
+              }
+            }
+
+            // Invoice events
+            for (final doc in invoiceSnap.data?.docs ?? []) {
+              final data = doc.data() as Map<String, dynamic>;
+              final invoiceNum = data['invoice_number'] as String? ?? '';
+              final milestoneName = data['milestone_name'] as String? ?? '';
+              final createdAt = (data['created_at'] as Timestamp?)?.toDate();
+              final paidAt = (data['paid_at'] as Timestamp?)?.toDate();
+              final method = data['payment_method'] as String? ?? '';
+              final emailedAt = (data['emailed_at'] as Timestamp?)?.toDate();
+              final reminderSent = data['reminder_sent'] == true;
+
+              if (createdAt != null) {
+                events.add({
+                  'icon': '📄',
+                  'text': 'Invoice generated: $invoiceNum — $milestoneName',
+                  'time': createdAt,
+                  'color': const Color(0xFFFF6B35),
+                });
+              }
+
+              if (emailedAt != null) {
+                events.add({
+                  'icon': '✉️',
+                  'text': 'Invoice emailed to client: $invoiceNum',
+                  'time': emailedAt,
+                  'color': const Color(0xFF8B5CF6),
+                });
+              }
+
+              if (paidAt != null) {
+                final methodLabel = method == 'stripe' ? 'via card' : method.isNotEmpty ? 'via $method' : '';
+                events.add({
+                  'icon': '💰',
+                  'text': 'Payment received $methodLabel: $invoiceNum',
+                  'time': paidAt,
+                  'color': const Color(0xFF10B981),
+                });
+              }
+
+              if (reminderSent) {
+                final reminderTime = (data['reminder_sent_at'] as Timestamp?)?.toDate();
+                if (reminderTime != null) {
+                  events.add({
+                    'icon': '⏰',
+                    'text': 'Payment reminder sent: $invoiceNum',
+                    'time': reminderTime,
+                    'color': const Color(0xFFF59E0B),
+                  });
+                }
+              }
+            }
+
+            if (events.isEmpty) return const SizedBox.shrink();
+
+            events.sort((a, b) => (b['time'] as DateTime).compareTo(a['time'] as DateTime));
+            final display = events.take(8).toList();
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.auto_awesome, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 6),
+                      Text('System Activity', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey[700])),
+                      const Spacer(),
+                      Text('Auto-generated', style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ...display.map((event) {
+                    final time = event['time'] as DateTime;
+                    final icon = event['icon'] as String;
+                    final text = event['text'] as String;
+                    final now = DateTime.now();
+                    final diff = now.difference(time);
+                    String timeStr;
+                    if (diff.inMinutes < 1) timeStr = 'Just now';
+                    else if (diff.inMinutes < 60) timeStr = '${diff.inMinutes}m ago';
+                    else if (diff.inHours < 24) timeStr = '${diff.inHours}h ago';
+                    else if (diff.inDays < 7) timeStr = '${diff.inDays}d ago';
+                    else timeStr = DateFormat('MMM d').format(time);
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(icon, style: const TextStyle(fontSize: 14)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(text, style: TextStyle(fontSize: 12, color: Colors.grey[700], height: 1.3)),
+                          ),
+                          Text(timeStr, style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildPhotoUpdateCard(Map<String, dynamic> activity) {
     final data = activity['data'] as Map<String, dynamic>;
     final date = activity['timestamp'] as DateTime;
@@ -2336,22 +2504,25 @@ Looking forward to working with you!
                                       );
                                     }
 
-                                    return ListView.builder(
+                                    return ListView(
                                       padding: const EdgeInsets.all(16),
-                                      itemCount: allItems.length,
-                                      itemBuilder: (context, index) {
-                                        final activity = allItems[index];
-                                        switch (activity['type']) {
-                                          case 'photo_update':
-                                            return _buildPhotoUpdateCard(activity);
-                                          case 'change_order':
-                                            return _buildChangeOrderCard(activity);
-                                          case 'milestone':
-                                            return _buildMilestoneCard(activity);
-                                          default:
-                                            return const SizedBox.shrink();
-                                        }
-                                      },
+                                      children: [
+                                        // System activity log
+                                        _buildSystemLog(),
+                                        // User activity
+                                        ...allItems.map((activity) {
+                                          switch (activity['type']) {
+                                            case 'photo_update':
+                                              return _buildPhotoUpdateCard(activity);
+                                            case 'change_order':
+                                              return _buildChangeOrderCard(activity);
+                                            case 'milestone':
+                                              return _buildMilestoneCard(activity);
+                                            default:
+                                              return const SizedBox.shrink();
+                                          }
+                                        }),
+                                      ],
                                     );
                                   },
                                 );
