@@ -121,7 +121,8 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
                   onPressed: () async {
                     Navigator.pop(ctx);
                     if (invoiceId != null) {
-                      final success = await StripeService.openCheckout(
+                      final success = await StripeService.showPaymentSheet(
+                        context: context,
                         projectId: widget.projectId,
                         invoiceId: invoiceId,
                         amount: milestoneAmount,
@@ -129,9 +130,12 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
                         clientEmail: clientEmail,
                         contractorName: contractorName,
                       );
-                      if (!success && mounted) {
+                      if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Unable to open payment page. You can pay your contractor directly.'), backgroundColor: Colors.orange),
+                          SnackBar(
+                            content: Text(success ? 'Payment successful!' : 'Payment not completed. You can pay your contractor directly.'),
+                            backgroundColor: success ? Colors.green : Colors.orange,
+                          ),
                         );
                       }
                     }

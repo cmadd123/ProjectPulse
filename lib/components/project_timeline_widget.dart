@@ -220,8 +220,9 @@ class ProjectTimelineWidget extends StatelessWidget {
                         .where('milestone_id', isEqualTo: milestoneId)
                         .get();
                     final invoiceId = invoices.docs.isNotEmpty ? invoices.docs.first.id : null;
-                    if (invoiceId != null) {
-                      await StripeService.openCheckout(
+                    if (invoiceId != null && ctx.mounted) {
+                      final success = await StripeService.showPaymentSheet(
+                        context: ctx,
                         projectId: projectId,
                         invoiceId: invoiceId,
                         amount: milestoneAmount,
@@ -229,6 +230,14 @@ class ProjectTimelineWidget extends StatelessWidget {
                         clientEmail: clientEmail,
                         contractorName: contractorName,
                       );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(success ? 'Payment successful!' : 'Payment not completed. You can pay your contractor directly.'),
+                            backgroundColor: success ? Colors.green : Colors.orange,
+                          ),
+                        );
+                      }
                     }
                   },
                   icon: const Icon(Icons.credit_card, size: 20),

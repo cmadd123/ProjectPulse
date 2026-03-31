@@ -1271,9 +1271,9 @@ exports.sendProjectCompletedEmail = onDocumentCreated(
   }
 );
 
-// ── 14. Stripe: Create Checkout Session ──────────────────────────
-// Called from the client app when they tap "Pay Online"
-exports.createCheckoutSession = onRequest(
+// ── 14. Stripe: Create PaymentIntent ─────────────────────────────
+// Called from the client app to get a client secret for the Payment Sheet
+exports.createPaymentIntent = onRequest(
   { secrets: [stripeSecretKey], cors: true },
   async (req, res) => {
     if (req.method !== 'POST') {
@@ -1296,50 +1296,47 @@ exports.createCheckoutSession = onRequest(
       const stripeFeeFixed = 0.30;
       const totalFeePercent = stripeFeePercent + platformFeePercent;
 
-      // Calculate fee: (amount * totalPercent%) + $0.30
       const processingFee = Math.round((milestoneAmount * totalFeePercent / 100 + stripeFeeFixed) * 100) / 100;
-      const totalCharge = Math.round((milestoneAmount + processingFee) * 100); // in cents
+      const totalChargeCents = Math.round((milestoneAmount + processingFee) * 100);
 
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ['card', 'us_bank_account'],
-        line_items: [
-          {
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: milestoneName || 'Milestone Payment',
-                description: `Payment to ${contractorName || 'your contractor'}`,
-              },
-              unit_amount: Math.round(milestoneAmount * 100), // milestone amount in cents
-            },
-            quantity: 1,
-          },
-          {
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: 'Processing Fee',
-                description: `${totalFeePercent.toFixed(1)}% + $0.30`,
-              },
-              unit_amount: Math.round(processingFee * 100), // fee in cents
-            },
-            quantity: 1,
-          },
-        ],
-        mode: 'payment',
-        customer_email: clientEmail || undefined,
+      // Create or reuse a Stripe customer
+      let customerId;
+      if (clientEmail) {
+        const existing = await stripe.customers.list({ email: clientEmail, limit: 1 });
+        if (existing.data.length > 0) {
+          customerId = existing.data[0].id;
+        } else {
+          const customer = await stripe.customers.create({ email: clientEmail });
+          customerId = customer.id;
+        }
+      }
+
+      // Create ephemeral key for the customer (required by Payment Sheet)
+      let ephemeralKey;
+      if (customerId) {
+        ephemeralKey = await stripe.ephemeralKeys.create(
+          { customer: customerId },
+          { apiVersion: '2024-06-20' },
+        );
+      }
+
+      // Create PaymentIntent
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: totalChargeCents,
+        currency: 'usd',
+        customer: customerId || undefined,
         metadata: {
           projectId,
           invoiceId,
           milestoneAmount: milestoneAmount.toString(),
           processingFee: processingFee.toString(),
           platformFeePercent: platformFeePercent.toString(),
+          milestoneName: milestoneName || '',
         },
-        success_url: `https://projectpulsehub.com/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `https://projectpulsehub.com/payment-cancelled`,
+        automatic_payment_methods: { enabled: true },
       });
 
-      // Save session ID to invoice (non-blocking — don't fail if invoice doc missing)
+      // Save to invoice doc (non-blocking)
       try {
         await getFirestore()
           .collection('projects')
@@ -1347,18 +1344,25 @@ exports.createCheckoutSession = onRequest(
           .collection('invoices')
           .doc(invoiceId)
           .update({
-            'stripe_session_id': session.id,
-            'stripe_checkout_url': session.url,
+            'stripe_payment_intent_id': paymentIntent.id,
             'processing_fee': processingFee,
           });
       } catch (updateErr) {
-        console.log('⚠️ Could not update invoice doc (may not exist yet):', updateErr.message);
+        console.log('⚠️ Could not update invoice doc:', updateErr.message);
       }
 
-      console.log(`✅ Checkout session created: ${session.id} for invoice ${invoiceId}`);
-      res.json({ url: session.url, sessionId: session.id });
+      console.log(`✅ PaymentIntent created: ${paymentIntent.id} for $${(totalChargeCents / 100).toFixed(2)}`);
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        customerId: customerId,
+        ephemeralKey: ephemeralKey?.secret,
+        paymentIntentId: paymentIntent.id,
+        milestoneAmount: milestoneAmount,
+        processingFee: processingFee,
+        totalCharge: totalChargeCents / 100,
+      });
     } catch (error) {
-      console.error('❌ Checkout session error:', error);
+      console.error('❌ PaymentIntent error:', error);
       res.status(500).json({ error: error.message });
     }
   }
@@ -1382,9 +1386,9 @@ exports.stripeWebhook = onRequest(
       return;
     }
 
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const { projectId, invoiceId, milestoneAmount, processingFee, platformFeePercent } = session.metadata || {};
+    if (event.type === 'payment_intent.succeeded') {
+      const paymentIntent = event.data.object;
+      const { projectId, invoiceId, milestoneAmount, processingFee, platformFeePercent } = paymentIntent.metadata || {};
 
       if (!projectId || !invoiceId) {
         console.log('❌ Missing metadata in checkout session');
@@ -1403,11 +1407,10 @@ exports.stripeWebhook = onRequest(
             'status': 'paid',
             'paid_at': FieldValue.serverTimestamp(),
             'payment_method': 'stripe',
-            'payment_intent_id': session.payment_intent,
-            'stripe_session_id': session.id,
+            'payment_intent_id': paymentIntent.id,
             'processing_fee': parseFloat(processingFee || '0'),
             'platform_fee_percent': parseFloat(platformFeePercent || '2.0'),
-            'amount_charged': session.amount_total / 100,
+            'amount_charged': paymentIntent.amount / 100,
           });
 
         // Notify GC

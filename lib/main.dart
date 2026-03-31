@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import 'utils/auth_utils.dart';
 // import 'dev/dev_tools_overlay.dart'; // Removed for production
 import 'screens/contractor/contractor_profile_screen.dart';
@@ -121,6 +122,7 @@ void main() async {
     overlays: [SystemUiOverlay.top], // Keep status bar, hide navbar
   );
 
+  Stripe.publishableKey = 'pk_test_51TGn3fJbx0kAIB9w0N9vaBq2f7kqR5ER7ruvVZ5DZuYmKKYd2NmkaZFdEI5D3hxj5wWEbPgCP6v6A0D834cwrbf20060uJdeC2';
   runApp(const ProjectPulseApp());
 }
 
