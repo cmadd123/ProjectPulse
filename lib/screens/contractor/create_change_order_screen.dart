@@ -124,6 +124,7 @@ class _CreateChangeOrderScreenState extends State<CreateChangeOrderScreen> {
                 maxLines: 4,
                 decoration: InputDecoration(
                   hintText: 'e.g., Add outlet in pantry for microwave',
+                  helperText: 'Your client will approve or decline this',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

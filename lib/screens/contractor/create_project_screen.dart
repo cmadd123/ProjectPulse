@@ -267,6 +267,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
                 decoration: InputDecoration(
                   labelText: 'Project Name *',
                   hintText: 'e.g., Smith Kitchen Remodel',
+                  helperText: 'Your client sees this name',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

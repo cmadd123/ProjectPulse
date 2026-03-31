@@ -520,6 +520,7 @@ class _MilestoneCard extends StatelessWidget {
               decoration: InputDecoration(
                 labelText: 'Name *',
                 hintText: item.nameHint,
+                helperText: 'Your client sees this — keep it clear',
                 hintStyle: TextStyle(color: Colors.grey[400]),
                 border: const OutlineInputBorder(),
                 filled: true,

@@ -384,6 +384,7 @@ Looking forward to working with you!
                 maxLines: 3,
                 decoration: InputDecoration(
                   hintText: 'Add a caption (e.g., "Demo complete - ready for electrical")',
+                  helperText: 'Your client sees this in their activity feed',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

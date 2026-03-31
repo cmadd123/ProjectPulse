@@ -353,7 +353,7 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
                 ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    TextField(controller: _titleController, decoration: _inputDeco('Job Title', hint: 'e.g., Master Bath Remodel')),
+                    TextField(controller: _titleController, decoration: _inputDeco('Job Title', hint: 'e.g., Master Bath Remodel', helper: 'This appears on the estimate your client receives')),
                     const SizedBox(height: 12),
                     TextField(controller: _clientNameController, decoration: _inputDeco('Client Name')),
                     const SizedBox(height: 12),
@@ -505,10 +505,11 @@ class _CreateEstimateScreenState extends State<CreateEstimateScreen> {
     );
   }
 
-  InputDecoration _inputDeco(String label, {String? hint}) {
+  InputDecoration _inputDeco(String label, {String? hint, String? helper}) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
+      helperText: helper,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       filled: true,
       fillColor: Colors.white,
