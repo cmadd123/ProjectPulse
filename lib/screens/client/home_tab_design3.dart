@@ -7,6 +7,7 @@ import '../../services/notification_service.dart';
 import '../../services/connectivity_service.dart';
 import '../../services/invoice_service.dart';
 import '../../services/stripe_service.dart';
+import '../../main.dart' show navigatorKey;
 
 /// Design 3: Personality Injection (Polished Current)
 /// Keep existing layout, add warmth and human touches
@@ -32,25 +33,11 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
   bool _welcomeMessageDismissed = false;
 
   Future<void> _approveMilestone(String milestoneId, String milestoneName, double milestoneAmount) async {
-    // Capture context before any async work — widget may rebuild
-    final navContext = context;
     final projectId = widget.projectId;
     final projectData = Map<String, dynamic>.from(widget.projectData);
 
     try {
-      await MilestoneRecord.updateMilestone(projectId, milestoneId, {
-        'status': 'approved',
-        'approved_at': FieldValue.serverTimestamp(),
-      });
-
-      final projectName = projectData['project_name'] as String? ?? 'Project';
-      NotificationService.sendMilestoneApprovedNotification(
-        projectId: projectId,
-        projectName: projectName,
-        milestoneName: milestoneName,
-      );
-
-      // Generate invoice
+      // Generate invoice BEFORE updating status (so widget doesn't rebuild yet)
       String? invoiceId;
       try {
         invoiceId = await InvoiceService.generateAndSave(
@@ -64,17 +51,126 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
         debugPrint('Invoice generation failed: $invoiceErr');
       }
 
-      // Show payment dialog using root navigator so it survives widget rebuilds
-      if (navContext.mounted) {
-        _showPaymentDialog(milestoneName, milestoneAmount, invoiceId);
+      // Show payment dialog BEFORE status update using root navigator
+      final rootNav = navigatorKey.currentState;
+      if (rootNav != null) {
+        _showPaymentDialogWithNav(rootNav.context, milestoneName, milestoneAmount, invoiceId, projectId, projectData);
       }
+
+      // NOW update status — this triggers rebuild but dialog is already showing
+      await MilestoneRecord.updateMilestone(projectId, milestoneId, {
+        'status': 'approved',
+        'approved_at': FieldValue.serverTimestamp(),
+      });
+
+      final projectName = projectData['project_name'] as String? ?? 'Project';
+      NotificationService.sendMilestoneApprovedNotification(
+        projectId: projectId,
+        projectName: projectName,
+        milestoneName: milestoneName,
+      );
     } catch (e) {
-      if (navContext.mounted) {
-        ScaffoldMessenger.of(navContext).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      debugPrint('Approve error: $e');
     }
+  }
+
+  void _showPaymentDialogWithNav(BuildContext navContext, String milestoneName, double milestoneAmount, String? invoiceId, String projectId, Map<String, dynamic> projectData) {
+    final currencyFmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    final contractorName = projectData['contractor_business_name'] as String? ?? '';
+    final clientEmail = projectData['client_email'] as String?;
+
+    showDialog(
+      context: navContext,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: Colors.green[50], shape: BoxShape.circle),
+                child: Icon(Icons.check, color: Colors.green[700], size: 32),
+              ),
+              const SizedBox(height: 12),
+              const Text('Milestone Approved!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(milestoneName, style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50], borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Amount Due', style: TextStyle(fontSize: 14)),
+                    Text(currencyFmt.format(milestoneAmount), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    if (invoiceId != null) {
+                      final success = await StripeService.showPaymentSheet(
+                        context: navContext,
+                        projectId: projectId,
+                        invoiceId: invoiceId,
+                        amount: milestoneAmount,
+                        milestoneName: milestoneName,
+                        clientEmail: clientEmail,
+                        contractorName: contractorName,
+                      );
+                      if (navContext.mounted) {
+                        ScaffoldMessenger.of(navContext).showSnackBar(
+                          SnackBar(
+                            content: Text(success ? 'Payment successful!' : 'Payment not completed. You can pay your contractor directly.'),
+                            backgroundColor: success ? Colors.green : Colors.orange,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.credit_card, size: 20),
+                  label: Text('Pay Online ${currencyFmt.format(milestoneAmount)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[600], foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text('Card or bank transfer · small processing fee applies', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Pay Another Way', style: TextStyle(fontSize: 14)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showPaymentDialog(String milestoneName, double milestoneAmount, String? invoiceId) {
