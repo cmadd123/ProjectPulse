@@ -74,6 +74,192 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
     }
   }
 
+  void _showMilestoneReview(String milestoneId, String name, String description, double amount) {
+    final projectId = widget.projectId;
+    final currencyFmt = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (_, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.orange[100],
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text('Awaiting Approval', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.orange[800])),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text(currencyFmt.format(amount), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                        ],
+                      ),
+                    ),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+              ),
+              const Divider(height: 24),
+              // Content
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  children: [
+                    // Description
+                    if (description.isNotEmpty) ...[
+                      Text('SCOPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[500], letterSpacing: 0.5)),
+                      const SizedBox(height: 6),
+                      Text(description, style: TextStyle(fontSize: 14, color: Colors.grey[800], height: 1.4)),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // Photos from this milestone period
+                    Text('PHOTOS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[500], letterSpacing: 0.5)),
+                    const SizedBox(height: 8),
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('projects')
+                          .doc(projectId)
+                          .collection('updates')
+                          .orderBy('created_at', descending: true)
+                          .snapshots(),
+                      builder: (context, snap) {
+                        final photos = (snap.data?.docs ?? []).where((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          return data['photo_url'] != null || data['image_url'] != null;
+                        }).toList();
+
+                        if (photos.isEmpty) {
+                          return Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(Icons.photo_camera_outlined, size: 36, color: Colors.grey[400]),
+                                const SizedBox(height: 8),
+                                Text('No photos posted yet', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
+                                const SizedBox(height: 4),
+                                Text('Your contractor will post photos as work progresses',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                                    textAlign: TextAlign.center),
+                              ],
+                            ),
+                          );
+                        }
+
+                        return Column(
+                          children: photos.take(6).map((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final photoUrl = (data['photo_url'] ?? data['image_url']) as String;
+                            final caption = data['caption'] as String? ?? '';
+                            final time = (data['created_at'] as Timestamp?)?.toDate();
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(
+                                      photoUrl,
+                                      width: double.infinity,
+                                      height: 200,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        height: 200,
+                                        color: Colors.grey[100],
+                                        child: Icon(Icons.broken_image, color: Colors.grey[400]),
+                                      ),
+                                    ),
+                                  ),
+                                  if (caption.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Text(caption, style: const TextStyle(fontSize: 13)),
+                                  ],
+                                  if (time != null) ...[
+                                    const SizedBox(height: 2),
+                                    Text(_getTimeAgo(time), style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                                  ],
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+              // Approve & Pay button pinned at bottom
+              Container(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -4))],
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _approveMilestone(milestoneId, name, amount);
+                    },
+                    icon: const Icon(Icons.check, size: 20),
+                    label: Text('Approve & Pay ${currencyFmt.format(amount)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green[600],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showPaymentDialogWithNav(BuildContext navContext, String milestoneName, double milestoneAmount, String? invoiceId, String projectId, Map<String, dynamic> projectData) {
     final currencyFmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
     final contractorName = projectData['contractor_business_name'] as String? ?? '';
@@ -696,7 +882,7 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => widget.onTabSwitch(3), // Go to Milestones tab to review work
+              onPressed: () => _showMilestoneReview(doc.id, name, description, amount),
               icon: const Icon(Icons.visibility, size: 18),
               label: const Text('Review & Approve', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
@@ -1050,69 +1236,158 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
   }
 
   Widget _buildActivityFeed() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '⚡ What\'s Happening',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 16),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('projects')
-                .doc(widget.projectId)
-                .collection('updates')
-                .orderBy('created_at', descending: true)
-                .limit(3)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return Text(
-                  'Updates will appear here when work begins',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
+    // Combine: photo updates + milestone events + change orders into one timeline
+    return StreamBuilder<List<MilestoneRecord>>(
+      stream: MilestoneRecord.getMilestones(widget.projectId),
+      builder: (context, milestoneSnap) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('projects')
+              .doc(widget.projectId)
+              .collection('updates')
+              .orderBy('created_at', descending: true)
+              .limit(10)
+              .snapshots(),
+          builder: (context, updatesSnap) {
+            return StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('projects')
+                  .doc(widget.projectId)
+                  .collection('change_orders')
+                  .snapshots(),
+              builder: (context, coSnap) {
+                // Build combined timeline
+                final events = <Map<String, dynamic>>[];
+
+                // Add milestone auto-events
+                for (final m in milestoneSnap.data ?? <MilestoneRecord>[]) {
+                  if (m.startedAt != null) {
+                    events.add({
+                      'icon': '🚀',
+                      'text': 'Work started on ${m.name}',
+                      'time': m.startedAt!,
+                    });
+                  }
+                  if (m.markedCompleteAt != null) {
+                    events.add({
+                      'icon': '✓',
+                      'text': '${m.name} marked complete',
+                      'time': m.markedCompleteAt!,
+                    });
+                  }
+                  if (m.approvedAt != null) {
+                    events.add({
+                      'icon': '💰',
+                      'text': '${m.name} approved — payment released',
+                      'time': m.approvedAt!,
+                    });
+                  }
+                }
+
+                // Add photo updates
+                for (final doc in updatesSnap.data?.docs ?? []) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final caption = data['caption'] as String? ?? 'Photo posted';
+                  final time = (data['created_at'] as Timestamp?)?.toDate();
+                  if (time != null) {
+                    events.add({
+                      'icon': '📸',
+                      'text': caption,
+                      'time': time,
+                      'hasPhoto': true,
+                    });
+                  }
+                }
+
+                // Add change orders
+                for (final doc in coSnap.data?.docs ?? []) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final title = data['title'] as String? ?? 'Change order';
+                  final status = data['status'] as String? ?? '';
+                  final time = (data['requested_at'] as Timestamp?)?.toDate();
+                  if (time != null) {
+                    final statusText = status == 'approved'
+                        ? 'approved'
+                        : status == 'declined'
+                            ? 'declined'
+                            : 'submitted';
+                    events.add({
+                      'icon': status == 'approved' ? '✓' : status == 'declined' ? '✗' : '📋',
+                      'text': 'Change order $statusText: $title',
+                      'time': time,
+                    });
+                  }
+                }
+
+                // Sort by time descending, take latest 6
+                events.sort((a, b) => (b['time'] as DateTime).compareTo(a['time'] as DateTime));
+                final display = events.take(6).toList();
+
+                if (display.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
+                return Container(
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '⚡ What\'s Happening',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...display.map((event) {
+                        final time = event['time'] as DateTime;
+                        final icon = event['icon'] as String;
+                        final text = event['text'] as String;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(icon, style: const TextStyle(fontSize: 16)),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(text, style: const TextStyle(fontSize: 13, height: 1.3)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _getTimeAgo(time),
+                                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
                   ),
                 );
-              }
-
-              return Column(
-                children: snapshot.data!.docs.map((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final caption = data['caption'] as String? ?? '';
-                  final createdAt = (data['created_at'] as Timestamp?)?.toDate();
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: _ActivityItem(
-                      time: createdAt != null ? _getTimeAgo(createdAt) : 'Recently',
-                      description: caption,
-                    ),
-                  );
-                }).toList(),
-              );
-            },
-          ),
-        ],
-      ),
+              },
+            );
+          },
+        );
+      },
     );
   }
 
