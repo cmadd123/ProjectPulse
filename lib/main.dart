@@ -1821,6 +1821,11 @@ class _ContractorProjectsScreenState
                     builder: (_) => const EstimatesListScreen(),
                   ));
                 }),
+                _buildToolbarButton(context, Icons.play_circle, 'Demo', () {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => const PreviewHomeDesign3(),
+                  ));
+                }),
                 _buildToolbarButton(context, Icons.photo_library, 'Portfolio', () {
                   Navigator.push(context, MaterialPageRoute(
                     builder: (_) => const PortfolioScreen(),
