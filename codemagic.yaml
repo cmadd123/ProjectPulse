@@ -1,0 +1,128 @@
+workflows:
+  ios-workflow:
+    name: iOS Production Build
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+
+    integrations:
+      app_store_connect: CodeMagic Key
+
+    environment:
+      flutter: 3.41.1
+      xcode: latest
+      cocoapods: default
+      groups:
+        - APP_STORE_KEYS
+      vars:
+        BUNDLE_ID: "com.consciousapps.projectpulse"
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+
+    scripts:
+      - name: Create GoogleService-Info.plist from environment variable
+        script: |
+          echo "$GOOGLE_SERVICE_INFO_PLIST" > ios/Runner/GoogleService-Info.plist
+
+      - name: Set up code signing
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create \
+            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY
+          keychain add-certificates
+          xcode-project use-profiles
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios && pod install
+
+      - name: Flutter analyze
+        script: |
+          flutter analyze --no-fatal-infos
+        ignore_failure: true
+
+      - name: Build iOS IPA with timestamp build number
+        script: |
+          BUILD_NUMBER=$(date +%s)
+          echo "=== BUILD NUMBER (Unix timestamp): $BUILD_NUMBER ==="
+
+          flutter build ipa --release \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+
+    publishing:
+      email:
+        recipients:
+          - collinjmaddox@gmail.com
+        notify:
+          success: true
+          failure: true
+
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+
+  android-workflow:
+    name: Android Production Build
+    max_build_duration: 60
+    instance_type: linux
+
+    environment:
+      flutter: 3.41.1
+      java: 17
+      groups:
+        - android_signing
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+
+    scripts:
+      - name: Create google-services.json from environment variable
+        script: |
+          echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Build Android APK
+        script: |
+          flutter build apk --release
+
+      - name: Build Android App Bundle
+        script: |
+          flutter build appbundle --release
+
+    artifacts:
+      - build/**/outputs/**/*.apk
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/mapping.txt
+
+    publishing:
+      email:
+        recipients:
+          - collinjmaddox@gmail.com
+        notify:
+          success: true
+          failure: true
