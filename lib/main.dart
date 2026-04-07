@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'utils/auth_utils.dart';
 import 'dev/dev_tools_overlay.dart'; // Temporarily re-enabled for testing
 import 'screens/contractor/contractor_profile_screen.dart';
@@ -138,6 +139,15 @@ class ProjectPulseApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       title: 'ProjectPulse',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en'),
+        Locale('es'),
+      ],
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(

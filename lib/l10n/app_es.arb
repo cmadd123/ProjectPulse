@@ -1,0 +1,127 @@
+{
+  "@@locale": "es",
+
+  "appName": "ProjectPulse",
+
+  "home": "Inicio",
+  "photos": "Fotos",
+  "chat": "Chat",
+  "milestones": "Fases",
+  "more": "Más",
+  "schedule": "Horario",
+  "team": "Equipo",
+  "estimates": "Presupuestos",
+  "portfolio": "Portafolio",
+  "profile": "Perfil",
+  "logout": "Cerrar sesión",
+  "projects": "Proyectos",
+  "notifications": "Notificaciones",
+
+  "today": "Hoy",
+  "todaySchedule": "Horario de hoy",
+  "noScheduleToday": "No hay trabajo programado hoy",
+  "allCaughtUp": "¡Todo al día! No hay tareas pendientes.",
+  "noProjectsYet": "Sin proyectos aún",
+  "yourGcWillAssign": "Tu contratista te asignará proyectos",
+  "projectsAssignedWillShow": "Los proyectos asignados aparecerán aquí",
+
+  "active": "Activo",
+  "completed": "Completado",
+  "pending": "Pendiente",
+  "inProgress": "En progreso",
+  "awaitingApproval": "Esperando aprobación",
+  "approved": "Aprobado",
+  "notStarted": "Sin comenzar",
+
+  "startWorking": "Comenzar trabajo",
+  "markComplete": "Marcar completo",
+  "approveAndPay": "Aprobar y pagar",
+  "reviewAndApprove": "Revisar y aprobar",
+  "payWithCard": "Pagar con tarjeta",
+  "payAnotherWay": "Pagar de otra forma",
+  "markAsPaid": "Marcar como pagado",
+  "confirmPayment": "Confirmar pago",
+
+  "milestoneApproved": "¡Fase aprobada!",
+  "amountDue": "Monto a pagar",
+  "processingFeeApplies": "Tarjeta, transferencia o wallet · aplica cargo por procesamiento",
+
+  "addExpense": "Agregar gasto",
+  "saveExpense": "Guardar gasto",
+  "exportCsv": "Exportar CSV",
+  "totalExpenses": "Gastos totales",
+  "scanReceipt": "Escanear recibo",
+  "scanReceiptTip": "Toma una foto y llenamos el vendedor y monto por ti",
+  "orEnterManually": "o ingresa manualmente",
+  "amount": "Monto",
+  "vendor": "Vendedor",
+  "description": "Descripción",
+  "category": "Categoría",
+  "materials": "Materiales",
+  "tools": "Herramientas",
+  "permits": "Permisos",
+  "labor": "Mano de obra",
+  "other": "Otro",
+
+  "logTime": "Registrar horas",
+  "hours": "Horas",
+  "date": "Fecha",
+
+  "camera": "Cámara",
+  "gallery": "Galería",
+  "save": "Guardar",
+  "cancel": "Cancelar",
+  "back": "Atrás",
+  "next": "Siguiente",
+  "done": "Listo",
+  "skip": "Omitir",
+  "close": "Cerrar",
+  "delete": "Eliminar",
+  "edit": "Editar",
+  "search": "Buscar",
+  "send": "Enviar",
+  "share": "Compartir",
+
+  "worker": "Trabajador",
+  "foreman": "Capataz",
+  "owner": "Dueño",
+  "crewSchedule": "Horario del equipo",
+
+  "signOut": "Cerrar sesión",
+  "signOutConfirm": "¿Estás seguro que quieres cerrar sesión?",
+
+  "noPhotosYet": "No hay fotos aún",
+  "noMessagesYet": "No hay mensajes aún",
+  "sendAMessage": "Enviar un mensaje",
+
+  "projectPhases": "Fases del proyecto",
+  "milestonesCompleted": "{completed} de {total} fases completadas",
+  "@milestonesCompleted": {
+    "placeholders": {
+      "completed": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+
+  "daysLeft": "{days} días restantes",
+  "@daysLeft": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+
+  "daysOverdue": "{days} días de retraso",
+  "@daysOverdue": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+
+  "howWasThisPaid": "¿Cómo se pagó?",
+  "zelle": "Zelle",
+  "check": "Cheque",
+  "venmo": "Venmo",
+  "cashApp": "Cash App",
+  "cash": "Efectivo",
+  "referenceOptional": "# de referencia (opcional)"
+}

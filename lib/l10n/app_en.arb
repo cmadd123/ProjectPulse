@@ -1,0 +1,127 @@
+{
+  "@@locale": "en",
+
+  "appName": "ProjectPulse",
+
+  "home": "Home",
+  "photos": "Photos",
+  "chat": "Chat",
+  "milestones": "Milestones",
+  "more": "More",
+  "schedule": "Schedule",
+  "team": "Team",
+  "estimates": "Estimates",
+  "portfolio": "Portfolio",
+  "profile": "Profile",
+  "logout": "Logout",
+  "projects": "Projects",
+  "notifications": "Notifications",
+
+  "today": "Today",
+  "todaySchedule": "Today's Schedule",
+  "noScheduleToday": "No work scheduled today",
+  "allCaughtUp": "All caught up! No action items right now.",
+  "noProjectsYet": "No projects yet",
+  "yourGcWillAssign": "Your GC will assign you to projects",
+  "projectsAssignedWillShow": "Projects assigned to your team will show up here",
+
+  "active": "Active",
+  "completed": "Completed",
+  "pending": "Pending",
+  "inProgress": "In Progress",
+  "awaitingApproval": "Awaiting Approval",
+  "approved": "Approved",
+  "notStarted": "Not Started",
+
+  "startWorking": "Start Working",
+  "markComplete": "Mark Complete",
+  "approveAndPay": "Approve & Pay",
+  "reviewAndApprove": "Review & Approve",
+  "payWithCard": "Pay with Card",
+  "payAnotherWay": "Pay Another Way",
+  "markAsPaid": "Mark as Paid",
+  "confirmPayment": "Confirm Payment",
+
+  "milestoneApproved": "Milestone Approved!",
+  "amountDue": "Amount Due",
+  "processingFeeApplies": "Card, bank transfer, or wallet · processing fee applies",
+
+  "addExpense": "Add Expense",
+  "saveExpense": "Save Expense",
+  "exportCsv": "Export CSV",
+  "totalExpenses": "Total Expenses",
+  "scanReceipt": "Scan a Receipt",
+  "scanReceiptTip": "Take a photo and we'll fill in the vendor and amount for you",
+  "orEnterManually": "or enter manually",
+  "amount": "Amount",
+  "vendor": "Vendor",
+  "description": "Description",
+  "category": "Category",
+  "materials": "Materials",
+  "tools": "Tools",
+  "permits": "Permits",
+  "labor": "Labor",
+  "other": "Other",
+
+  "logTime": "Log Time",
+  "hours": "Hours",
+  "date": "Date",
+
+  "camera": "Camera",
+  "gallery": "Gallery",
+  "save": "Save",
+  "cancel": "Cancel",
+  "back": "Back",
+  "next": "Next",
+  "done": "Done",
+  "skip": "Skip",
+  "close": "Close",
+  "delete": "Delete",
+  "edit": "Edit",
+  "search": "Search",
+  "send": "Send",
+  "share": "Share",
+
+  "worker": "Worker",
+  "foreman": "Foreman",
+  "owner": "Owner",
+  "crewSchedule": "Crew Schedule",
+
+  "signOut": "Sign Out",
+  "signOutConfirm": "Are you sure you want to sign out?",
+
+  "noPhotosYet": "No photos posted yet",
+  "noMessagesYet": "No messages yet",
+  "sendAMessage": "Send a message",
+
+  "projectPhases": "Project Phases",
+  "milestonesCompleted": "{completed} of {total} milestones completed",
+  "@milestonesCompleted": {
+    "placeholders": {
+      "completed": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+
+  "daysLeft": "{days} days left",
+  "@daysLeft": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+
+  "daysOverdue": "{days} days overdue",
+  "@daysOverdue": {
+    "placeholders": {
+      "days": { "type": "int" }
+    }
+  },
+
+  "howWasThisPaid": "How was this paid?",
+  "zelle": "Zelle",
+  "check": "Check",
+  "venmo": "Venmo",
+  "cashApp": "Cash App",
+  "cash": "Cash",
+  "referenceOptional": "Reference # (optional)"
+}
