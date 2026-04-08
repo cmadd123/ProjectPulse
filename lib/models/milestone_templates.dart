@@ -114,6 +114,136 @@ class MilestoneTemplates {
       ],
     ),
     MilestoneTemplate(
+      name: 'Pool Build',
+      description: 'Standard 5-phase pool construction',
+      milestones: [
+        MilestoneTemplateItem(
+          name: 'Excavation',
+          description: 'Dig pool shell, grade site, haul away dirt.',
+          percentage: 15,
+        ),
+        MilestoneTemplateItem(
+          name: 'Steel & Plumbing',
+          description: 'Install rebar cage, plumbing lines, pool equipment pad.',
+          percentage: 20,
+        ),
+        MilestoneTemplateItem(
+          name: 'Gunite / Shotcrete',
+          description: 'Spray concrete shell. Cure period begins.',
+          percentage: 25,
+        ),
+        MilestoneTemplateItem(
+          name: 'Tile, Coping & Decking',
+          description: 'Install waterline tile, coping stones, and pool deck.',
+          percentage: 25,
+        ),
+        MilestoneTemplateItem(
+          name: 'Plaster & Fill',
+          description: 'Apply interior finish, fill pool, start equipment, final walkthrough.',
+          percentage: 15,
+        ),
+      ],
+    ),
+    MilestoneTemplate(
+      name: 'Landscape Design/Build',
+      description: 'Standard 4-phase landscape transformation',
+      milestones: [
+        MilestoneTemplateItem(
+          name: 'Site Prep & Demolition',
+          description: 'Clear existing landscape, grade site, install drainage.',
+          percentage: 20,
+        ),
+        MilestoneTemplateItem(
+          name: 'Hardscape',
+          description: 'Install retaining walls, patio, walkways, and outdoor structures.',
+          percentage: 35,
+        ),
+        MilestoneTemplateItem(
+          name: 'Planting & Irrigation',
+          description: 'Install irrigation system, trees, shrubs, and ground cover.',
+          percentage: 30,
+        ),
+        MilestoneTemplateItem(
+          name: 'Lighting & Finish',
+          description: 'Install landscape lighting, mulch, final grading, and walkthrough.',
+          percentage: 15,
+        ),
+      ],
+    ),
+    MilestoneTemplate(
+      name: 'Cabinet Installation',
+      description: 'Standard 3-phase custom cabinet project',
+      milestones: [
+        MilestoneTemplateItem(
+          name: 'Design & Fabrication',
+          description: 'Finalize design, order materials, build cabinets in shop.',
+          percentage: 40,
+        ),
+        MilestoneTemplateItem(
+          name: 'Installation',
+          description: 'Deliver and install cabinets, adjust doors and drawers.',
+          percentage: 40,
+        ),
+        MilestoneTemplateItem(
+          name: 'Hardware & Punch List',
+          description: 'Install hardware, touch-up finish, final walkthrough.',
+          percentage: 20,
+        ),
+      ],
+    ),
+    MilestoneTemplate(
+      name: 'Flooring',
+      description: 'Standard 3-phase flooring project',
+      milestones: [
+        MilestoneTemplateItem(
+          name: 'Removal & Prep',
+          description: 'Remove existing flooring, level subfloor, prep for install.',
+          percentage: 25,
+        ),
+        MilestoneTemplateItem(
+          name: 'Installation',
+          description: 'Install new flooring throughout specified areas.',
+          percentage: 50,
+        ),
+        MilestoneTemplateItem(
+          name: 'Trim & Cleanup',
+          description: 'Install transitions, baseboards, final cleanup and walkthrough.',
+          percentage: 25,
+        ),
+      ],
+    ),
+    MilestoneTemplate(
+      name: 'Addition / New Build',
+      description: 'Standard 5-phase room addition or new construction',
+      milestones: [
+        MilestoneTemplateItem(
+          name: 'Foundation',
+          description: 'Excavate, form, and pour foundation. Inspection.',
+          percentage: 15,
+        ),
+        MilestoneTemplateItem(
+          name: 'Framing & Dry-In',
+          description: 'Frame walls and roof, install windows, doors, and roofing.',
+          percentage: 25,
+        ),
+        MilestoneTemplateItem(
+          name: 'Rough Mechanicals',
+          description: 'Electrical, plumbing, HVAC rough-in. Inspections.',
+          percentage: 20,
+        ),
+        MilestoneTemplateItem(
+          name: 'Drywall & Finishes',
+          description: 'Hang and finish drywall, paint, install cabinets and flooring.',
+          percentage: 25,
+        ),
+        MilestoneTemplateItem(
+          name: 'Final & CO',
+          description: 'Fixtures, appliances, trim, punch list. Certificate of Occupancy.',
+          percentage: 15,
+        ),
+      ],
+    ),
+    MilestoneTemplate(
       name: 'Custom',
       description: 'Create your own milestone structure',
       milestones: [

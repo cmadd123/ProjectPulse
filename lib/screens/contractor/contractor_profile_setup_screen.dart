@@ -16,6 +16,20 @@ class _ContractorProfileSetupScreenState
   final _ownerNameController = TextEditingController();
   final _phoneController = TextEditingController();
   bool _isSolo = false;
+  String _selectedTrade = '';
+
+  static const _trades = [
+    ('remodeling', 'Remodeling', Icons.home_repair_service),
+    ('roofing', 'Roofing', Icons.roofing),
+    ('pool', 'Pool Building', Icons.pool),
+    ('landscape', 'Landscaping', Icons.grass),
+    ('flooring', 'Flooring', Icons.grid_on),
+    ('cabinets', 'Cabinets', Icons.kitchen),
+    ('painting', 'Painting', Icons.format_paint),
+    ('addition', 'Additions / New Build', Icons.add_home),
+    ('deck', 'Decks & Outdoor', Icons.deck),
+    ('other', 'Other', Icons.construction),
+  ];
 
   @override
   void dispose() {
@@ -32,6 +46,7 @@ class _ContractorProfileSetupScreenState
         'owner_name': _ownerNameController.text.trim(),
         'phone': _phoneController.text.trim(),
         'is_solo': _isSolo ? 'true' : 'false',
+        'trade': _selectedTrade,
       });
     }
   }
@@ -171,6 +186,46 @@ class _ContractorProfileSetupScreenState
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 24),
+
+              // Trade selection
+              Text(
+                'What kind of work do you do?',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'We\'ll set up templates for your projects',
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _trades.map((trade) {
+                  final isSelected = _selectedTrade == trade.$1;
+                  return ChoiceChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(trade.$3, size: 16,
+                            color: isSelected ? Colors.white : Colors.grey[700]),
+                        const SizedBox(width: 6),
+                        Text(trade.$2),
+                      ],
+                    ),
+                    selected: isSelected,
+                    onSelected: (_) => setState(() => _selectedTrade = trade.$1),
+                    selectedColor: const Color(0xFF2D3748),
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : Colors.grey[800],
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 32),
 

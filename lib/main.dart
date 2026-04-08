@@ -836,6 +836,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               'owner_name': ownerName,
               'phone': profileData['phone'] ?? '',
               'is_solo': isSolo,
+              'trade': profileData['trade'] ?? '',
               'specialties': [],
               'rating_average': 0.0,
               'total_reviews': 0,

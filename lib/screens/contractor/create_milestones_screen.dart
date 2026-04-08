@@ -285,6 +285,11 @@ class _CreateMilestonesScreenState extends State<CreateMilestonesScreen> {
                       'Bathroom Remodel': Icons.bathtub,
                       'Roofing': Icons.roofing,
                       'Deck Build': Icons.deck,
+                      'Pool Build': Icons.pool,
+                      'Landscape Design/Build': Icons.grass,
+                      'Cabinet Installation': Icons.kitchen,
+                      'Flooring': Icons.grid_on,
+                      'Addition / New Build': Icons.add_home,
                       'Custom': Icons.tune,
                     };
                     return Padding(
