@@ -31,29 +31,39 @@ workflows:
 
       - name: Set up code signing
         script: |
+          set -e
+          echo "=== Initializing keychain ==="
           keychain initialize
+
+          echo "=== Fetching signing files for: $BUNDLE_ID ==="
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create \
             --certificate-key=@env:CERTIFICATE_PRIVATE_KEY
+
+          echo "=== Adding certificates to keychain ==="
           keychain add-certificates
+
+          echo "=== Applying profiles to Xcode project ==="
           xcode-project use-profiles
 
+          echo "=== Code signing setup complete ==="
+
       - name: Get Flutter packages
-        script: |
-          flutter pub get
+        script: flutter pub get
 
       - name: Install CocoaPods dependencies
         script: |
           cd ios && pod install
 
       - name: Flutter analyze
-        script: |
-          flutter analyze --no-fatal-infos
+        script: flutter analyze --no-fatal-infos
         ignore_failure: true
 
       - name: Build iOS IPA with timestamp build number
         script: |
+          # Unix timestamp as build number — always unique, always increasing,
+          # never collides with a previous TestFlight upload.
           BUILD_NUMBER=$(date +%s)
           echo "=== BUILD NUMBER (Unix timestamp): $BUILD_NUMBER ==="
 
@@ -77,52 +87,3 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-
-  android-workflow:
-    name: Android Production Build
-    max_build_duration: 60
-    instance_type: linux
-
-    environment:
-      flutter: 3.41.1
-      java: 17
-      groups:
-        - android_signing
-
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-          source: true
-
-    scripts:
-      - name: Create google-services.json from environment variable
-        script: |
-          echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
-
-      - name: Get Flutter packages
-        script: |
-          flutter pub get
-
-      - name: Build Android APK
-        script: |
-          flutter build apk --release
-
-      - name: Build Android App Bundle
-        script: |
-          flutter build appbundle --release
-
-    artifacts:
-      - build/**/outputs/**/*.apk
-      - build/**/outputs/**/*.aab
-      - build/**/outputs/**/mapping.txt
-
-    publishing:
-      email:
-        recipients:
-          - collinjmaddox@gmail.com
-        notify:
-          success: true
-          failure: true
