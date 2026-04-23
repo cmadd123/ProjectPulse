@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../screens/client/client_project_timeline.dart';
 import '../screens/client/design_preview_menu.dart';
+import '../services/demo_project_seeder.dart';
 
 /// Floating dev tools panel for testing.
 /// Remove this file before production release.
@@ -474,6 +475,54 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
     setState(() => _switching = false);
   }
 
+  /// Seed the Johnson Residence kitchen demo project for the signed-in user.
+  Future<void> _seedDemoProject(BuildContext ctx) async {
+    setState(() => _switching = true);
+    try {
+      final id = await DemoProjectSeeder.seed();
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content: Text('Seeded demo project ($id). Pull to refresh.'),
+            backgroundColor: Colors.amber[800],
+          ),
+        );
+      }
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(content: Text('Seed failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _switching = false);
+    }
+  }
+
+  /// Remove any previously-seeded demo projects (is_demo == true).
+  Future<void> _cleanupDemoOnly(BuildContext ctx) async {
+    setState(() => _switching = true);
+    try {
+      final n = await DemoProjectSeeder.cleanup();
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content: Text('Removed $n demo project${n == 1 ? '' : 's'}.'),
+            backgroundColor: Colors.amber[800],
+          ),
+        );
+      }
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(content: Text('Cleanup failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _switching = false);
+    }
+  }
+
   /// Delete all projects except the ones in keepNames
   Future<void> _cleanupProjects(BuildContext ctx) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -721,6 +770,48 @@ class _DevToolsOverlayState extends State<DevToolsOverlay> {
                               const SizedBox(width: 8),
                               Text('Cleanup test projects',
                                   style: TextStyle(color: Colors.red[300], fontWeight: FontWeight.bold, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Seed demo project (Johnson kitchen) button
+                      GestureDetector(
+                        onTap: _switching ? null : () => _seedDemoProject(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.auto_awesome, color: Colors.amber[300], size: 18),
+                              const SizedBox(width: 8),
+                              Text('Seed demo project (Johnson)',
+                                  style: TextStyle(color: Colors.amber[300], fontWeight: FontWeight.bold, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Cleanup demo projects only
+                      GestureDetector(
+                        onTap: _switching ? null : () => _cleanupDemoOnly(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.cleaning_services, color: Colors.amber[200], size: 18),
+                              const SizedBox(width: 8),
+                              Text('Remove demo project',
+                                  style: TextStyle(color: Colors.amber[200], fontWeight: FontWeight.bold, fontSize: 11)),
                             ],
                           ),
                         ),
