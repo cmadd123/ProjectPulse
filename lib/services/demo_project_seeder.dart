@@ -275,7 +275,9 @@ class DemoProjectSeeder {
 
     var removed = 0;
     for (final projectDoc in demos.docs) {
-      // Delete known subcollections in batches. Firestore doesn't cascade.
+      // Delete known subcollections. Firestore doesn't cascade and each
+      // subcollection may have different rules — one permission error
+      // shouldn't kill the whole cleanup, so each is in its own try.
       for (final sub in [
         'milestones',
         'updates',
@@ -286,13 +288,29 @@ class DemoProjectSeeder {
         'invoices',
         'documents',
       ]) {
-        final subSnap = await projectDoc.reference.collection(sub).get();
-        for (final d in subSnap.docs) {
-          await d.reference.delete();
+        try {
+          final subSnap = await projectDoc.reference.collection(sub).get();
+          for (final d in subSnap.docs) {
+            try {
+              await d.reference.delete();
+            } catch (e) {
+              // Log and keep going.
+              // ignore: avoid_print
+              print('Cleanup: could not delete $sub/${d.id}: $e');
+            }
+          }
+        } catch (e) {
+          // ignore: avoid_print
+          print('Cleanup: skipping $sub on ${projectDoc.id}: $e');
         }
       }
-      await projectDoc.reference.delete();
-      removed += 1;
+      try {
+        await projectDoc.reference.delete();
+        removed += 1;
+      } catch (e) {
+        // ignore: avoid_print
+        print('Cleanup: could not delete project ${projectDoc.id}: $e');
+      }
     }
     return removed;
   }

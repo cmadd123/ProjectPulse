@@ -332,6 +332,21 @@ service cloud.firestore {
           resource.data.logged_by_uid == request.auth.uid;
       }
 
+      // Client changes subcollection (quality issues + addition requests)
+      match /client_changes/{changeId} {
+        // Everyone with project access can read
+        allow read: if canAccessProject(projectId);
+
+        // Client creates these; contractor allowed too for demo seeding
+        allow create: if canAccessProject(projectId);
+
+        // Owner can mark as addressed, client can update their own status
+        allow update: if isProjectOwner(projectId) || isProjectClient(projectId);
+
+        // Only owner can delete (cleanup)
+        allow delete: if isProjectOwner(projectId);
+      }
+
       // Invoices subcollection (generated after milestone approval)
       match /invoices/{invoiceId} {
         // Owner and client can read invoices
