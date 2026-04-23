@@ -65,5 +65,13 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>ProjectPulse needs camera access so you can take photo updates on the jobsite and scan receipts.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ProjectPulse needs access to your photos so you can attach existing images to project updates and receipts.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>ProjectPulse saves project photos to your library when you export them.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ProjectPulse may record short video clips of jobsite updates.</string>
 </dict>
 </plist>
