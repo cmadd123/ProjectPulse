@@ -129,9 +129,10 @@ class DemoProjectSeeder {
     // Change order tied to the Cabinets milestone — matches the app's
     // create_change_order_screen schema (description, cost_change,
     // requested_at, milestone_ref, milestone_name, responded_*).
+    // Description is in the contractor's voice — they wrote it, client approves.
     await projectRef.collection('change_orders').add({
-      'description': 'Upgrade counters from laminate to 3cm quartz slab. '
-          'Client-approved upgrade adds \$2,500 material and ~3 days to schedule.',
+      'description': 'Upgrade countertops from laminate to 3cm quartz per client request. '
+          'Adds 3 days to schedule.',
       'cost_change': 2500.0,
       'status': 'pending',
       'milestone_ref': cabinetsMilestoneRef,
@@ -142,6 +143,120 @@ class DemoProjectSeeder {
       'created_by_ref': db.collection('users').doc(user.uid),
       'is_demo': true,
     });
+
+    // Client-authored requests ─ the "client_changes" subcollection captures
+    // both quality issues and addition requests. These are what Sarah
+    // Johnson would submit to the contractor from the client timeline.
+    // `requested_by_ref` points at the contractor user since no real client
+    // user exists in the demo — display shows a name, not a login identity.
+    final clientStandInRef = db.collection('users').doc(user.uid);
+
+    await projectRef.collection('client_changes').add({
+      'type': 'quality_issue',
+      'request_text':
+          'Small crack in the tile by the fridge — noticed it after the '
+          'countertop install. Want to make sure it gets fixed before '
+          'appliances go back in.',
+      'photo_url': 'https://picsum.photos/seed/demo-qi1/400/300',
+      'milestone_ref': cabinetsMilestoneRef,
+      'milestone_name': cabinetsMilestoneName ?? 'General',
+      'requested_by_ref': clientStandInRef,
+      'status': 'pending',
+      'created_at': Timestamp.fromDate(now.subtract(const Duration(hours: 20))),
+      'updated_at': Timestamp.fromDate(now.subtract(const Duration(hours: 20))),
+      'is_demo': true,
+    });
+
+    await projectRef.collection('client_changes').add({
+      'type': 'addition_request',
+      'request_text':
+          'Can we also replace the pantry door with a barn-style slider '
+          'while the kitchen is torn up? Would love to get a price.',
+      'photo_url': null,
+      'milestone_ref': null,
+      'milestone_name': 'General',
+      'requested_by_ref': clientStandInRef,
+      'status': 'pending',
+      'contractor_response': null,
+      'change_order_ref': null,
+      'created_at': Timestamp.fromDate(now.subtract(const Duration(hours: 6))),
+      'updated_at': Timestamp.fromDate(now.subtract(const Duration(hours: 6))),
+      'is_demo': true,
+    });
+
+    // Expenses — receipts the GC has logged against the project.
+    final contractorName = profile?['full_name'] as String? ?? 'Demo Contractor';
+    final expenses = [
+      {
+        'amount': 450.0,
+        'vendor': 'BigBox Rentals',
+        'description': '30-yd roll-off dumpster for demo debris',
+        'category': 'other',
+        'daysAgo': 20,
+      },
+      {
+        'amount': 682.50,
+        'vendor': 'Hardwood Supply Co',
+        'description': 'Subfloor patches + underlayment',
+        'category': 'materials',
+        'daysAgo': 18,
+      },
+      {
+        'amount': 85.0,
+        'vendor': 'City of Anytown',
+        'description': 'Plumbing permit',
+        'category': 'permits',
+        'daysAgo': 14,
+      },
+      {
+        'amount': 324.18,
+        'vendor': "Mike's Plumbing Supply",
+        'description': 'Rough-in PEX + fittings + shutoffs',
+        'category': 'materials',
+        'daysAgo': 11,
+      },
+    ];
+    for (final e in expenses) {
+      await projectRef.collection('expenses').add({
+        'amount': e['amount'],
+        'vendor': e['vendor'],
+        'description': e['description'],
+        'category': e['category'],
+        'receipt_photo_url': null,
+        'entered_by_uid': user.uid,
+        'entered_by_name': contractorName,
+        'entered_by_role': 'contractor',
+        'created_at': Timestamp.fromDate(
+          now.subtract(Duration(days: e['daysAgo'] as int)),
+        ),
+        'is_demo': true,
+      });
+    }
+
+    // Time entries — hours the GC has logged against the project recently.
+    final timeLogs = [
+      {'daysAgo': 6, 'hours': 7.5, 'note': 'Demolition + debris cleanup'},
+      {'daysAgo': 4, 'hours': 6.0, 'note': 'Plumbing rough-in, island sink + dishwasher line'},
+      {'daysAgo': 2, 'hours': 8.0, 'note': 'Cabinet hang — base units leveled, uppers started'},
+      {'daysAgo': 1, 'hours': 5.5, 'note': 'Counter templating + finishing uppers'},
+    ];
+    for (final t in timeLogs) {
+      final entryDate = DateTime(
+        now.year, now.month, now.day,
+      ).subtract(Duration(days: t['daysAgo'] as int));
+      await projectRef.collection('time_entries').add({
+        'date': Timestamp.fromDate(entryDate),
+        'hours': t['hours'],
+        'description': t['note'],
+        'logged_by_uid': user.uid,
+        'logged_by_name': contractorName,
+        'logged_by_role': 'contractor',
+        'entered_by_uid': user.uid,
+        'entered_by_name': contractorName,
+        'created_at': Timestamp.fromDate(entryDate),
+        'is_demo': true,
+      });
+    }
 
     return projectRef.id;
   }
@@ -161,7 +276,16 @@ class DemoProjectSeeder {
     var removed = 0;
     for (final projectDoc in demos.docs) {
       // Delete known subcollections in batches. Firestore doesn't cascade.
-      for (final sub in ['milestones', 'updates', 'change_orders', 'invoices']) {
+      for (final sub in [
+        'milestones',
+        'updates',
+        'change_orders',
+        'client_changes',
+        'expenses',
+        'time_entries',
+        'invoices',
+        'documents',
+      ]) {
         final subSnap = await projectDoc.reference.collection(sub).get();
         for (final d in subSnap.docs) {
           await d.reference.delete();
