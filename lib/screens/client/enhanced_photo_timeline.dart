@@ -841,10 +841,10 @@ class _MilestoneCard extends StatelessWidget {
         // Handle error state
         if (updatesSnapshot.hasError) {
           if (kDebugMode) {
-            print('=== MILESTONE QUERY ERROR ===');
-            print('Milestone: $milestoneTitle');
-            print('Milestone Ref: ${milestoneRef.path}');
-            print('ERROR: ${updatesSnapshot.error}');
+            debugPrint('=== MILESTONE QUERY ERROR ===');
+            debugPrint('Milestone: $milestoneTitle');
+            debugPrint('Milestone Ref: ${milestoneRef.path}');
+            debugPrint('ERROR: ${updatesSnapshot.error}');
           }
           return Card(
             margin: const EdgeInsets.only(bottom: 16),
