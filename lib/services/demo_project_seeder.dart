@@ -66,6 +66,10 @@ class DemoProjectSeeder {
     await projectRef.set(projectData);
 
     // Milestones with realistic timestamps based on current status.
+    // Track the cabinets milestone so we can link the change order to it.
+    DocumentReference? cabinetsMilestoneRef;
+    String? cabinetsMilestoneName;
+
     for (final m in DemoProjectData.milestones) {
       final order = m['order'] as int;
       final status = m['status'] as String;
@@ -96,10 +100,16 @@ class DemoProjectSeeder {
       final milestoneRef = projectRef.collection('milestones').doc();
       await milestoneRef.set(milestone);
 
+      final name = m['name'] as String;
+      if (name.toLowerCase().contains('cabinet')) {
+        cabinetsMilestoneRef = milestoneRef;
+        cabinetsMilestoneName = name;
+      }
+
       // Photo updates tied to the milestone.
       final photoUrls = List<String>.from(m['photo_urls'] as List);
       for (var i = 0; i < photoUrls.length; i++) {
-        final captionPool = _captionsForMilestone(m['name'] as String);
+        final captionPool = _captionsForMilestone(name);
         await projectRef.collection('updates').add({
           'photo_url': photoUrls[i],
           'thumbnail_url': photoUrls[i],
@@ -116,14 +126,19 @@ class DemoProjectSeeder {
       }
     }
 
-    // A sample change order against the third milestone (cabinets).
+    // Change order tied to the Cabinets milestone — matches the app's
+    // create_change_order_screen schema (description, cost_change,
+    // requested_at, milestone_ref, milestone_name, responded_*).
     await projectRef.collection('change_orders').add({
-      'title': 'Upgrade counters to quartz',
-      'description': 'Client requested upgrade from laminate to 3cm quartz slab. '
-          '+\$2,500 material, +3 days schedule.',
-      'amount': 2500.0,
+      'description': 'Upgrade counters from laminate to 3cm quartz slab. '
+          'Client-approved upgrade adds \$2,500 material and ~3 days to schedule.',
+      'cost_change': 2500.0,
       'status': 'pending',
-      'created_at': Timestamp.fromDate(now.subtract(const Duration(days: 2))),
+      'milestone_ref': cabinetsMilestoneRef,
+      'milestone_name': cabinetsMilestoneName,
+      'requested_at': Timestamp.fromDate(now.subtract(const Duration(days: 2))),
+      'responded_at': null,
+      'responded_by_ref': null,
       'created_by_ref': db.collection('users').doc(user.uid),
       'is_demo': true,
     });

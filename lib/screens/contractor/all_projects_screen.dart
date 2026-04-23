@@ -41,6 +41,33 @@ class _AllProjectsScreenState extends State<AllProjectsScreen> {
     super.dispose();
   }
 
+  Widget _buildChip({IconData? icon, required String label, required MaterialColor color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: color[700]),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              color: color[700],
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _formatTimeAgo(DateTime date) {
     final now = DateTime.now();
     final diff = now.difference(date);
@@ -476,179 +503,52 @@ class _AllProjectsScreenState extends State<AllProjectsScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 16, vertical: 12),
                                 child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    Container(
-                                      padding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: status == 'active'
-                                            ? Colors.green
-                                                .withOpacity(0.1)
-                                            : Colors.grey
-                                                .withOpacity(0.1),
-                                        borderRadius:
-                                            BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        status == 'active'
-                                            ? 'Active'
-                                            : 'Completed',
-                                        style: TextStyle(
-                                          color: status == 'active'
-                                              ? Colors.green[700]
-                                              : Colors.grey[600],
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                    // Chips wrap onto additional lines when
+                                    // they don't fit — timestamp stays pinned
+                                    // on the right without clipping.
+                                    Expanded(
+                                      child: Wrap(
+                                        spacing: 8,
+                                        runSpacing: 6,
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        children: [
+                                          _buildChip(
+                                            label: status == 'active' ? 'Active' : 'Completed',
+                                            color: status == 'active' ? Colors.green : Colors.grey,
+                                          ),
+                                          if (photoCount > 0)
+                                            _buildChip(
+                                              icon: Icons.photo_camera,
+                                              label: '$photoCount',
+                                              color: Colors.purple,
+                                            ),
+                                          if (awaitingCount > 0)
+                                            _buildChip(
+                                              icon: Icons.rate_review,
+                                              label: '$awaitingCount',
+                                              color: Colors.orange,
+                                            ),
+                                          if (pendingCOs > 0)
+                                            _buildChip(
+                                              icon: Icons.request_quote,
+                                              label: '$pendingCOs CO',
+                                              color: Colors.blue,
+                                            ),
+                                          if (pendingClientChanges > 0)
+                                            _buildChip(
+                                              icon: Icons.report_problem,
+                                              label: '$pendingClientChanges',
+                                              color: Colors.red,
+                                            ),
+                                        ],
                                       ),
                                     ),
-                                    if (photoCount > 0) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.purple.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.photo_camera,
-                                                size: 12, color: Colors.purple[700]),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '$photoCount',
-                                              style: TextStyle(
-                                                color: Colors.purple[700],
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    if (awaitingCount > 0) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets
-                                            .symmetric(
-                                            horizontal: 10,
-                                            vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange
-                                              .withOpacity(0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(
-                                                  12),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize:
-                                              MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.rate_review,
-                                                size: 12,
-                                                color: Colors
-                                                    .orange[700]),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '$awaitingCount awaiting',
-                                              style: TextStyle(
-                                                color: Colors
-                                                    .orange[700],
-                                                fontSize: 12,
-                                                fontWeight:
-                                                    FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    if (pendingCOs > 0) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets
-                                            .symmetric(
-                                            horizontal: 10,
-                                            vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue
-                                              .withOpacity(0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(
-                                                  12),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize:
-                                              MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                                Icons.request_quote,
-                                                size: 12,
-                                                color:
-                                                    Colors.blue[700]),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '$pendingCOs CO pending',
-                                              style: TextStyle(
-                                                color:
-                                                    Colors.blue[700],
-                                                fontSize: 12,
-                                                fontWeight:
-                                                    FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    if (pendingClientChanges > 0) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets
-                                            .symmetric(
-                                            horizontal: 10,
-                                            vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.red
-                                              .withOpacity(0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(
-                                                  12),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize:
-                                              MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                                Icons.report_problem,
-                                                size: 12,
-                                                color:
-                                                    Colors.red[700]),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '$pendingClientChanges client req',
-                                              style: TextStyle(
-                                                color:
-                                                    Colors.red[700],
-                                                fontSize: 12,
-                                                fontWeight:
-                                                    FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    const Spacer(),
+                                    const SizedBox(width: 8),
                                     if (updatedAt != null)
                                       Text(
-                                        _formatTimeAgo(
-                                            updatedAt.toDate()),
+                                        _formatTimeAgo(updatedAt.toDate()),
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: Colors.grey[500],
