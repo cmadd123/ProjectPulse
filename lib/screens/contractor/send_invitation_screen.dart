@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/analytics_service.dart';
 
 class SendInvitationScreen extends StatefulWidget {
@@ -79,12 +80,16 @@ class _SendInvitationScreenState extends State<SendInvitationScreen> {
     setState(() => _isSending = true);
 
     try {
-      // Simple approach: Just set invitation_ready to true
-      // Cloud Function triggers when this field changes from false/undefined → true
-      await FirebaseFirestore.instance
+      // The Cloud Function triggers on invitation_ready false→true. If the
+      // flag is already true from a prior (failed) attempt, setting it to
+      // true again won't re-trigger. Reset to false first, then back to true.
+      final ref = FirebaseFirestore.instance
           .collection('projects')
-          .doc(widget.projectId)
-          .update({
+          .doc(widget.projectId);
+
+      await ref.update({'invitation_ready': false});
+      await Future.delayed(const Duration(milliseconds: 400));
+      await ref.update({
         'invitation_ready': true,
         'invitation_requested_at': FieldValue.serverTimestamp(),
       });
@@ -102,7 +107,26 @@ class _SendInvitationScreenState extends State<SendInvitationScreen> {
       setState(() => _isSending = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Could not send email: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// Open the native share sheet so the GC can fire off the invite through
+  /// WhatsApp / Slack / any messaging app on their phone.
+  Future<void> _shareInvite() async {
+    final inviteLink = 'https://projectpulsehub.com/join/${widget.projectId}';
+    final msg = 'Hi ${widget.clientName}! I just set up your project in '
+        'ProjectPulse so you can track progress, photos, and payments '
+        'in one place.\n\nOpen: $inviteLink';
+    try {
+      await Share.share(msg, subject: widget.projectName);
+      Analytics.firstInviteSent(projectId: widget.projectId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open share sheet: $e')),
         );
       }
     }
@@ -219,13 +243,13 @@ Looking forward to working with you!''';
           children: [
             // Header
             Icon(
-              _invitationSent ? Icons.check_circle : Icons.email_outlined,
+              _invitationSent ? Icons.check_circle : Icons.send_outlined,
               size: 64,
               color: _invitationSent ? Colors.green : Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 16),
             Text(
-              _invitationSent ? 'Invitation Sent!' : 'Ready to Invite Client',
+              _invitationSent ? 'Invitation Sent!' : 'Invite Your Client',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -233,8 +257,8 @@ Looking forward to working with you!''';
             const SizedBox(height: 8),
             Text(
               _invitationSent
-                  ? '${widget.clientName} will receive an email shortly'
-                  : 'An invitation email will be sent to:',
+                  ? '${widget.clientName} will get your message shortly'
+                  : 'Send ${widget.clientName} a link to track their project:',
               style: TextStyle(fontSize: 16, color: Colors.grey[700]),
             ),
             const SizedBox(height: 24),
@@ -520,28 +544,18 @@ Looking forward to working with you!''';
             ),
             const SizedBox(height: 32),
 
-            // Send Email Button
+            // Primary: Send via Text. Most contractors text their clients
+            // — meets them in their existing workflow. Opens the native
+            // SMS composer with a prefilled message including the invite link.
             if (!_invitationSent)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _isSending ? null : _sendInvitation,
-                  icon: _isSending
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.email),
-                  label: Text(
-                    _isSending ? 'Sending...' : 'Send Email Invitation',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  onPressed: _isLoadingMilestones ? null : _sendContractText,
+                  icon: const Icon(Icons.textsms_outlined),
+                  label: const Text(
+                    'Send via Text',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
@@ -554,7 +568,7 @@ Looking forward to working with you!''';
                 ),
               ),
 
-            // Or share the link directly section
+            // Secondary options: share, copy, or email.
             const SizedBox(height: 16),
             if (!_invitationSent)
               Row(
@@ -563,7 +577,7 @@ Looking forward to working with you!''';
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
-                      'Or share the link directly',
+                      'Or share another way',
                       style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                     ),
                   ),
@@ -575,7 +589,22 @@ Looking forward to working with you!''';
             if (!_invitationSent)
               Row(
                 children: [
-                  // Copy Link button
+                  // Share via any app (WhatsApp, Slack, etc.)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoadingMilestones ? null : _shareInvite,
+                      icon: const Icon(Icons.share, size: 18),
+                      label: const Text('Share…'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Copy link
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
@@ -597,22 +626,30 @@ Looking forward to working with you!''';
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // Send Text button
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _isLoadingMilestones ? null : _sendContractText,
-                      icon: const Icon(Icons.textsms_outlined, size: 18),
-                      label: const Text('Send Text'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
+                ],
+              ),
+
+            if (!_invitationSent) const SizedBox(height: 8),
+            if (!_invitationSent)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _isSending ? null : _sendInvitation,
+                  icon: _isSending
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.email_outlined, size: 18),
+                  label: Text(_isSending ? 'Sending email…' : 'Send Email Instead'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                ],
+                ),
               ),
 
             // Post-send state: show share options with real-time status
