@@ -2,6 +2,29 @@
 
 Organized so each phase has a clear **gate** — don't advance until the gate is met.
 
+## Current state (as of last session)
+
+- ✅ iOS TestFlight build working (Codemagic wired, App Store Connect app record created as "ProjectPulse HQ")
+- ✅ Android debug loop working (ADB install flow on Samsung A15)
+- ✅ Demo project seeder — Johnson Kitchen Remodel fully populated: 4 milestones, photos, CO, 2 client_changes, 4 expenses, 4 time entries, 2 crew, 3 subs w/ mixed COI states, 1 accepted estimate, 7 schedule entries
+- ✅ Firestore rules fixed for client_changes subcollection
+- ✅ All_projects_screen chip overflow fixed
+- ✅ Schedule chip abbreviation fixed ("JKR" not "KR-")
+- ✅ Contractor CO view confirmed (read-only in Activity tab, renders alongside photos + completed milestones)
+- ✅ Raw `print()` calls replaced with `debugPrint()` in shipped code
+- ✅ Phase 1c: Analytics + Crashlytics live (10 conversion events wired, user_role as user property, first-* events gated on SharedPreferences)
+- ⏳ Need logo (1024×1024 PNG, user working on it)
+
+## Next up (in order)
+
+1. **Fake invitation flow** (Phase 1a) — "auto-send" is fake; replace with real shareable link OR wire up email Cloud Function
+2. **Silent catch blocks** (Phase 1a) — surface SnackBars on failure
+3. **Push notifications diagnosis** (Phase 1a) — known broken
+4. **Empty-state "Try demo project" button** (Phase 1b finish) — currently only via dev tools
+5. **Public demo URL** (Phase 1d) — `/c/johnson-kitchen` client-portal preview
+
+---
+
 ---
 
 ## Phase 0 — Ship iOS build (this week)
