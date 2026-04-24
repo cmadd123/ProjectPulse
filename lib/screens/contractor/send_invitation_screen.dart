@@ -71,8 +71,23 @@ class _SendInvitationScreenState extends State<SendInvitationScreen> {
         }).toList();
         _isLoadingMilestones = false;
       });
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('Failed to load milestones for invitation: $e\n$st');
       setState(() => _isLoadingMilestones = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Could not load milestones. Your invitation will go without project details — '
+              'add them manually if needed.',
+            ),
+            backgroundColor: Colors.orange[700],
+            duration: const Duration(seconds: 8),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
     }
   }
 

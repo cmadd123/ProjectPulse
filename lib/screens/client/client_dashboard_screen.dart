@@ -110,8 +110,10 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
             .doc(projectId)
             .update({'client_user_ref': userRef});
       }
-    } catch (_) {
-      // Auto-link failed silently — will retry on next load
+    } catch (e, st) {
+      // Auto-link is best-effort — will retry on next load. Log so we can
+      // see if it fails repeatedly for the same user.
+      debugPrint('Client auto-link failed for project $projectId: $e\n$st');
     }
   }
 
@@ -184,7 +186,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           if (mounted) {
             setState(() => _brandColor = Color(colorValue));
           }
-        } catch (_) {
+        } catch (e) {
+          debugPrint('Brand color hex parse failed for "$colorHex": $e');
           if (logoUrl != null) await _extractColorFromLogo(logoUrl);
         }
       } else if (logoUrl != null) {
@@ -201,8 +204,9 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       if (mounted) {
         setState(() => _brandColor = scheme.primary);
       }
-    } catch (_) {
-      // Keep default brand color
+    } catch (e) {
+      // Cosmetic — keep default brand color but log so we can spot bad logo URLs.
+      debugPrint('Logo color extraction failed for "$logoUrl": $e');
     }
   }
 

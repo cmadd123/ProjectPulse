@@ -41,6 +41,7 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
     try {
       // Generate invoice BEFORE updating status (so widget doesn't rebuild yet)
       String? invoiceId;
+      String? invoiceError;
       try {
         invoiceId = await InvoiceService.generateAndSave(
           projectId: projectId,
@@ -49,8 +50,9 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
           milestoneAmount: milestoneAmount,
           projectData: projectData,
         );
-      } catch (invoiceErr) {
-        debugPrint('Invoice generation failed: $invoiceErr');
+      } catch (invoiceErr, st) {
+        debugPrint('Invoice generation failed: $invoiceErr\n$st');
+        invoiceError = invoiceErr.toString().split('\n').first;
       }
 
       // Show payment dialog BEFORE status update using root navigator
@@ -71,8 +73,36 @@ class _HomeTabDesign3State extends State<HomeTabDesign3> {
         projectName: projectName,
         milestoneName: milestoneName,
       );
-    } catch (e) {
-      debugPrint('Approve error: $e');
+
+      // If invoice generation failed, surface it after the success path —
+      // milestone is approved either way, but the contractor needs to know
+      // there's no invoice doc to follow up on.
+      if (invoiceError != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Milestone approved, but the invoice didn\'t generate. '
+              'Tell your contractor — they\'ll need to create one manually.',
+            ),
+            backgroundColor: Colors.orange[700],
+            duration: const Duration(seconds: 12),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } catch (e, st) {
+      debugPrint('Approve error: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Couldn\'t approve milestone: ${e.toString().split('\n').first}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
     }
   }
 

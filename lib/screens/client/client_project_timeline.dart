@@ -88,8 +88,10 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
             .doc(widget.projectId)
             .update({'client_user_ref': userRef});
       }
-    } catch (_) {
-      // Auto-link failed silently — will retry on next load
+    } catch (e, st) {
+      // Best-effort — will retry on next load. Log so persistent failures
+      // for the same user become visible in Crashlytics-adjacent diagnostics.
+      debugPrint('Client auto-link failed for project ${widget.projectId}: $e\n$st');
     }
   }
 

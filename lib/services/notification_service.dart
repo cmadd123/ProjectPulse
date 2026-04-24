@@ -110,8 +110,11 @@ class NotificationService {
       }, SetOptions(merge: true));
 
       debugPrint('FCM Token saved: $token');
-    } catch (e) {
-      debugPrint('Error saving FCM token: $e');
+    } catch (e, st) {
+      // Surface FCM token failures clearly in logs — this is the silent
+      // killer that breaks push notifications for testers without them
+      // realizing why nothing's coming through.
+      debugPrint('❌ FCM Token save failed (push notifications won\'t work for this user): $e\n$st');
     }
   }
 
