@@ -2,26 +2,55 @@
 
 Organized so each phase has a clear **gate** — don't advance until the gate is met.
 
-## Current state (as of last session)
+## Current state (as of 2026-04-24)
 
-- ✅ iOS TestFlight build working (Codemagic wired, App Store Connect app record created as "ProjectPulse HQ")
-- ✅ Android debug loop working (ADB install flow on Samsung A15)
-- ✅ Demo project seeder — Johnson Kitchen Remodel fully populated: 4 milestones, photos, CO, 2 client_changes, 4 expenses, 4 time entries, 2 crew, 3 subs w/ mixed COI states, 1 accepted estimate, 7 schedule entries
-- ✅ Firestore rules fixed for client_changes subcollection
-- ✅ All_projects_screen chip overflow fixed
-- ✅ Schedule chip abbreviation fixed ("JKR" not "KR-")
-- ✅ Contractor CO view confirmed (read-only in Activity tab, renders alongside photos + completed milestones)
+### Phase 0 — iOS build infrastructure ✅
+- iOS TestFlight build working via Codemagic. App Store Connect record = "ProjectPulse HQ" (bundle: com.consciousapps.projectpulse, App ID: 6763167071)
+- Info.plist has `ITSAppUsesNonExemptEncryption=false` + all NSxxxUsageDescription strings
+- CERTIFICATE_PRIVATE_KEY + GOOGLE_SERVICE_INFO_PLIST in Codemagic env group APP_STORE_KEYS
+- Android debug loop working (ADB install on Samsung A15)
+- ⏳ Logo (1024×1024 PNG) still pending — will drive `flutter_launcher_icons` when ready
+
+### Phase 1a — Pre-tester blockers
+- ✅ Logout confirmation (already existed across all entry points)
 - ✅ Raw `print()` calls replaced with `debugPrint()` in shipped code
-- ✅ Phase 1c: Analytics + Crashlytics live (10 conversion events wired, user_role as user property, first-* events gated on SharedPreferences)
-- ⏳ Need logo (1024×1024 PNG, user working on it)
+- ✅ **Invitation flow** (2026-04-24) — shareable-link primary UX:
+  - "Send via Text" big primary button (opens native SMS with prefilled message + link)
+  - "Share…" opens native share sheet for WhatsApp/Slack/any app
+  - "Copy Link" / "Send Email Instead" as secondary options
+  - Email retry bug fixed (invitation_ready resets false→true so re-send works)
+- ✅ **SendGrid fix** (2026-04-24) — new API key in Secret Manager, em3007.projectpulsehub.com domain authenticated, all 11 email Cloud Functions redeployed. All email types should now deliver. Untested end-to-end.
+- ⏳ Silent catch blocks — NOT STARTED
+- ⏳ Push notifications diagnosis — NOT STARTED (memory notes several failure points in notification_service.dart)
+
+### Phase 1b — Demo project ✅ (complete)
+- `DemoProjectSeeder` writes full Johnson Kitchen Remodel: project + 4 milestones + 6 photos + CO + 2 client_changes + 4 expenses + 4 time entries + 2 crew + 3 subs w/ mixed COI states + 1 estimate + 7 schedule entries
+- Seeder + cleanup buttons in dev tools overlay
+- `client_changes` Firestore rules added; cleanup resilient to per-subcollection failures
+- Chip abbreviation bug fixed ("JKR" not "KR-")
+- all_projects_screen chip overflow fixed
+- ⏳ Empty-state "Try demo project" button for new-GC onboarding — still only accessible via dev tools
+
+### Phase 1c — Analytics ✅ (complete)
+- `firebase_analytics` + `firebase_crashlytics` in pubspec
+- AnalyticsService wrapper with 10 conversion events wired at call sites:
+  - sign_up, role_selected, first_project_created, first_invite_sent,
+    milestone_completed, milestone_approved, invoice_generated,
+    payment_marked_paid, photo_uploaded, client_portal_opened
+- user_role set as user property; first_* events gated via SharedPreferences
+- Crashlytics auto-captures FlutterError + PlatformDispatcher errors
+
+### Phase 1d — Public demo URL
+- ⏳ NOT STARTED (`projectpulsehub.com/c/johnson-kitchen` client-portal preview for cold outreach)
 
 ## Next up (in order)
 
-1. **Fake invitation flow** (Phase 1a) — "auto-send" is fake; replace with real shareable link OR wire up email Cloud Function
-2. **Silent catch blocks** (Phase 1a) — surface SnackBars on failure
-3. **Push notifications diagnosis** (Phase 1a) — known broken
-4. **Empty-state "Try demo project" button** (Phase 1b finish) — currently only via dev tools
-5. **Public demo URL** (Phase 1d) — `/c/johnson-kitchen` client-portal preview
+1. **Verify SendGrid end-to-end** — send a test invitation to a real email, confirm it lands. Pull Cloud Function logs if not.
+2. **Silent catch blocks** (Phase 1a #2) — surface SnackBars on failure
+3. **Push notifications diagnosis** (Phase 1a #3)
+4. **Empty-state "Try demo project" button** (finishes Phase 1b)
+5. **Public demo URL** (Phase 1d)
+6. → Phase 2: recruit 3-5 testers
 
 ---
 
