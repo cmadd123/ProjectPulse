@@ -606,21 +606,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     data['project_id'] as String? ?? '';
                 final color = _projectColor(projectId);
 
-                // Create abbreviation: first letter of each word, max 3 letters
-                final words = projectName.split(' ');
+                // Create abbreviation: first letter of each word, max 3 letters.
+                // Skip tokens that don't start with a letter (dashes, punctuation, etc.)
+                // so "Kitchen Remodel - Johnson" yields "KRJ" not "KR-".
+                final words = projectName
+                    .split(' ')
+                    .where((w) => w.isNotEmpty && RegExp(r'^[A-Za-z]').hasMatch(w))
+                    .toList();
                 String abbreviation;
                 if (words.length >= 2) {
-                  // Multi-word: take first letter of each word (max 3)
                   abbreviation = words
                       .take(3)
-                      .map((w) => w.isNotEmpty ? w[0].toUpperCase() : '')
+                      .map((w) => w[0].toUpperCase())
                       .join('');
-                } else if (projectName.length <= 6) {
-                  // Short name: show full name
-                  abbreviation = projectName;
+                } else if (words.length == 1 && words.first.length <= 6) {
+                  abbreviation = words.first;
+                } else if (words.length == 1) {
+                  abbreviation = words.first
+                      .substring(0, words.first.length >= 5 ? 5 : 4)
+                      .toUpperCase();
                 } else {
-                  // Long single word: first 4-5 chars
-                  abbreviation = projectName.substring(0, projectName.length >= 5 ? 5 : 4).toUpperCase();
+                  abbreviation = '?';
                 }
 
                 return Tooltip(

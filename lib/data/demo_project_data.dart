@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// shown to new GCs who haven't created any projects yet.
 class DemoProjectData {
   static Map<String, dynamic> get project => {
-        'project_name': 'Kitchen Remodel - Johnson Residence',
+        'project_name': 'Johnson Kitchen Remodel',
         'client_name': 'Sarah Johnson',
         'client_email': 'sarah.johnson@example.com',
         'client_phone': '(555) 987-6543',
