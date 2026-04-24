@@ -26,6 +26,7 @@ import 'screens/client/client_dashboard_screen.dart';
 import 'services/deep_link_service.dart';
 import 'services/notification_service.dart';
 import 'services/connectivity_service.dart';
+import 'services/analytics_service.dart';
 import 'screens/shared/notification_center_screen.dart';
 import 'data/demo_project_data.dart';
 import 'components/skeleton_loader.dart';
@@ -104,6 +105,10 @@ void main() async {
 
   // Initialize connectivity monitoring
   await ConnectivityService.instance.initialize();
+
+  // Initialize analytics + crashlytics early so downstream init failures
+  // get captured.
+  await Analytics.init();
 
   // Initialize push notifications
   await NotificationService.initialize();
@@ -293,6 +298,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
         // User is logged in
         if (snapshot.hasData && snapshot.data != null) {
+          // Tie analytics + crashlytics to this user.
+          Analytics.setUserId(snapshot.data!.uid);
           // Check for pending invite after login
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _deepLinkService.handlePendingInvite(context);
@@ -633,6 +640,7 @@ class _AuthScreenState extends State<AuthScreen> {
           email: email,
           password: password,
         );
+        Analytics.signedUp(role: 'unknown'); // role gets set in the picker
       }
     } on FirebaseAuthException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -786,6 +794,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     setState(() => _isLoading = true);
 
     final user = FirebaseAuth.instance.currentUser!;
+    Analytics.setUserRole(role);
+    Analytics.roleSelected(role: role);
 
     try {
       // If contractor, show profile setup screen first

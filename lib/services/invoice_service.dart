@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'analytics_service.dart';
 
 class InvoiceService {
   static final _currencyFormat =
@@ -69,6 +70,12 @@ class InvoiceService {
       'released_amount': milestoneAmount,
       'released_at': FieldValue.serverTimestamp(),
     });
+
+    Analytics.invoiceGenerated(
+      projectId: projectId,
+      invoiceId: invoiceDoc.id,
+      amount: milestoneAmount,
+    );
 
     return invoiceDoc.id;
   }
@@ -379,5 +386,10 @@ class InvoiceService {
         .collection('invoices')
         .doc(invoiceId)
         .update(updates);
+
+    Analytics.paymentMarkedPaid(
+      projectId: projectId,
+      invoiceId: invoiceId,
+    );
   }
 }

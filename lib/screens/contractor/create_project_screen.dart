@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'create_milestones_screen.dart';
 import 'send_invitation_screen.dart';
+import '../../services/analytics_service.dart';
 
 class CreateProjectScreen extends StatefulWidget {
   const CreateProjectScreen({super.key});
@@ -179,6 +180,11 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       };
 
       final projectDoc = await FirebaseFirestore.instance.collection('projects').add(projectData);
+
+      Analytics.firstProjectCreated(
+        projectId: projectDoc.id,
+        projectName: projectData['project_name'] as String?,
+      );
 
       if (!mounted) return;
 

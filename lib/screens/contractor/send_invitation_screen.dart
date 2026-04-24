@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
+import '../../services/analytics_service.dart';
 
 class SendInvitationScreen extends StatefulWidget {
   final String projectId;
@@ -87,6 +88,8 @@ class _SendInvitationScreenState extends State<SendInvitationScreen> {
         'invitation_ready': true,
         'invitation_requested_at': FieldValue.serverTimestamp(),
       });
+
+      Analytics.firstInviteSent(projectId: widget.projectId);
 
       // Wait briefly to allow Cloud Function to process and write back invitation_sent
       await Future.delayed(const Duration(seconds: 2));

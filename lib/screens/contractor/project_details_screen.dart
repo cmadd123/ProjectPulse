@@ -30,6 +30,7 @@ import '../client/home_tab_design3.dart';
 import '../shared/project_chat_design3.dart';
 import '../client/enhanced_photo_timeline.dart';
 import '../../services/invoice_service.dart';
+import '../../services/analytics_service.dart';
 import 'debug_tools_screen.dart';
 import '../../components/client_changes_activity_widget.dart';
 import '../../components/debug_console.dart';
@@ -717,6 +718,10 @@ Looking forward to working with you!
         });
         debugLog += '✓ Firestore document created SUCCESS\n';
         debugPrint('Photo Upload - Firestore document created SUCCESS');
+        Analytics.photoUploaded(
+          projectId: widget.projectId,
+          milestoneId: _selectedMilestone?.id,
+        );
       } catch (uploadError) {
         debugLog += '\n❌ ERROR:\n$uploadError\n';
         debugPrint('Photo Upload - ERROR at upload stage: $uploadError');

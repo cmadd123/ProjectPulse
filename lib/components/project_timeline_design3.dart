@@ -7,6 +7,7 @@ import '../backend/schema/milestone_update_record.dart';
 import '../services/notification_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/invoice_service.dart';
+import '../services/analytics_service.dart';
 import 'add_milestone_update_bottom_sheet.dart';
 import 'reply_to_update_bottom_sheet.dart';
 import 'change_type_selector_bottom_sheet.dart';
@@ -180,6 +181,12 @@ class ProjectTimelineDesign3 extends StatelessWidget {
         'marked_complete_at': FieldValue.serverTimestamp(),
       });
 
+      Analytics.milestoneCompleted(
+        projectId: projectId,
+        milestoneId: milestoneId,
+        milestoneName: milestoneName,
+      );
+
       // Notify client about milestone completion
       NotificationService.sendMilestoneNotification(
         projectId: projectId,
@@ -259,6 +266,13 @@ class ProjectTimelineDesign3 extends StatelessWidget {
         'status': 'approved',
         'approved_at': FieldValue.serverTimestamp(),
       });
+
+      Analytics.milestoneApproved(
+        projectId: projectId,
+        milestoneId: milestoneId,
+        milestoneName: milestoneName,
+        amount: milestoneAmount,
+      );
 
       debugPrint('Milestone status updated successfully');
 

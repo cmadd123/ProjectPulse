@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/connectivity_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/analytics_service.dart';
 import 'leave_review_screen.dart';
 import '../shared/project_chat_screen.dart';
 import '../../components/project_timeline_widget.dart';
@@ -43,6 +44,7 @@ class _ClientProjectTimelineState extends State<ClientProjectTimeline> {
   void initState() {
     super.initState();
     if (widget.isPreview) return;
+    Analytics.clientPortalOpened(projectId: widget.projectId);
     _ensureClientLinked();
     _listenToNotifications();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
