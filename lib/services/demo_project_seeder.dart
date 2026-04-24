@@ -265,6 +265,87 @@ class DemoProjectSeeder {
       'assigned_member_uids': FieldValue.arrayUnion([demoForemanUid, demoWorkerUid]),
     });
 
+    // Subcontractors — a realistic kitchen remodel pulls in multiple trades.
+    // Deliberately seeding a mix of COI states so the insurance alert
+    // dashboard has something to show:
+    //   - Ace Electric     → COI valid (expires in 6 months)
+    //   - Precision Plumbing → COI expiring soon (~25 days out)
+    //   - Finch Tile       → COI expired (10 days ago)
+    final subsToSeed = <Map<String, dynamic>>[
+      {
+        'company_name': 'Ace Electric',
+        'contact_name': 'Carla Ruiz',
+        'email': 'carla@ace-electric.demo',
+        'phone': '(555) 212-4401',
+        'address': '88 Industrial Pkwy, Anytown',
+        'trade': 'Electrical',
+        'notes': 'Licensed master electrician. Preferred for kitchens.',
+        'coi_expires_in_days': 180,
+        'coi_insurance_company': 'Travelers',
+        'coi_policy_number': 'TRV-84219-EL',
+      },
+      {
+        'company_name': 'Precision Plumbing',
+        'contact_name': 'Dan Kowalski',
+        'email': 'dan@precisionplumb.demo',
+        'phone': '(555) 331-9020',
+        'address': '402 Water St, Anytown',
+        'trade': 'Plumbing',
+        'notes': 'Quick turnarounds on rough-in. Gas certified.',
+        'coi_expires_in_days': 25,
+        'coi_insurance_company': 'Hartford',
+        'coi_policy_number': 'HAR-22041-PL',
+      },
+      {
+        'company_name': 'Finch Tile',
+        'contact_name': 'Ana Finch',
+        'email': 'ana@finchtile.demo',
+        'phone': '(555) 779-5124',
+        'address': '15 Arch St, Anytown',
+        'trade': 'Tile',
+        'notes': 'Ceramic + natural stone. Owner does the install.',
+        'coi_expires_in_days': -10, // expired
+        'coi_insurance_company': 'Liberty Mutual',
+        'coi_policy_number': 'LMM-09824-TL',
+      },
+    ];
+
+    final subIds = <String>[];
+    for (final s in subsToSeed) {
+      final subRef = teamRef.collection('subcontractors').doc();
+      await subRef.set({
+        'company_name': s['company_name'],
+        'contact_name': s['contact_name'],
+        'email': s['email'],
+        'phone': s['phone'],
+        'address': s['address'],
+        'trade': s['trade'],
+        'status': 'active',
+        'notes': s['notes'],
+        'added_at': Timestamp.fromDate(now.subtract(const Duration(days: 45))),
+        'is_demo': true,
+      });
+      subIds.add(subRef.id);
+
+      // One COI per sub.
+      await subRef.collection('coi').add({
+        'insurance_company': s['coi_insurance_company'],
+        'policy_number': s['coi_policy_number'],
+        'coverage_type': 'General Liability',
+        'expiry_date': Timestamp.fromDate(
+          now.add(Duration(days: s['coi_expires_in_days'] as int)),
+        ),
+        'document_url': null,
+        'uploaded_at': Timestamp.fromDate(now.subtract(const Duration(days: 45))),
+        'is_demo': true,
+      });
+    }
+
+    // Assign subs to the Johnson project.
+    await projectRef.update({
+      'assigned_sub_ids': FieldValue.arrayUnion(subIds),
+    });
+
     // Schedule entries spanning this week — Mike + Jake on Johnson a few days.
     final scheduleDays = <Map<String, dynamic>>[
       {'uid': demoForemanUid, 'name': 'Mike Reyes', 'daysAgo': 2},
@@ -361,6 +442,29 @@ class DemoProjectSeeder {
       final teamId = userSnap.data()?['team_id'] as String?;
       if (teamId != null) {
         final teamRef = db.collection('teams').doc(teamId);
+
+        // Subs first — they have a coi subcollection to wipe.
+        try {
+          final subsSnap = await teamRef.collection('subcontractors')
+              .where('is_demo', isEqualTo: true).get();
+          for (final subDoc in subsSnap.docs) {
+            try {
+              final coiSnap = await subDoc.reference.collection('coi').get();
+              for (final c in coiSnap.docs) {
+                try { await c.reference.delete(); }
+                catch (_) {}
+              }
+              await subDoc.reference.delete();
+            } catch (e) {
+              // ignore: avoid_print
+              print('Cleanup: could not delete sub ${subDoc.id}: $e');
+            }
+          }
+        } catch (e) {
+          // ignore: avoid_print
+          print('Cleanup: skipping subcontractors: $e');
+        }
+
         for (final sub in ['members', 'schedule_entries']) {
           try {
             final demoSnap = await teamRef.collection(sub)
