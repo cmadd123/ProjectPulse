@@ -233,6 +233,92 @@ class DemoProjectSeeder {
       });
     }
 
+    // Team members — two fake crew so the "Crew" count + today's
+    // schedule strip isn't empty. These uids don't correspond to real
+    // Firebase users; the app displays the `name` field directly.
+    const demoForemanUid = 'demo_foreman_mike';
+    const demoWorkerUid = 'demo_worker_jake';
+    final teamRef = db.collection('teams').doc(teamId);
+
+    await teamRef.collection('members').doc(demoForemanUid).set({
+      'name': 'Mike Reyes',
+      'email': 'mike@demo.invalid',
+      'role': 'foreman',
+      'user_uid': demoForemanUid,
+      'added_at': Timestamp.fromDate(now.subtract(const Duration(days: 60))),
+      'status': 'active',
+      'is_demo': true,
+    });
+    await teamRef.collection('members').doc(demoWorkerUid).set({
+      'name': 'Jake Hensley',
+      'email': 'jake@demo.invalid',
+      'role': 'worker',
+      'user_uid': demoWorkerUid,
+      'added_at': Timestamp.fromDate(now.subtract(const Duration(days: 35))),
+      'status': 'active',
+      'is_demo': true,
+    });
+
+    // Assign the fake crew to the Johnson project so the dashboard
+    // shows "3 crew" and schedule strip knows about them.
+    await projectRef.update({
+      'assigned_member_uids': FieldValue.arrayUnion([demoForemanUid, demoWorkerUid]),
+    });
+
+    // Schedule entries spanning this week — Mike + Jake on Johnson a few days.
+    final scheduleDays = <Map<String, dynamic>>[
+      {'uid': demoForemanUid, 'name': 'Mike Reyes', 'daysAgo': 2},
+      {'uid': demoForemanUid, 'name': 'Mike Reyes', 'daysAgo': 1},
+      {'uid': demoWorkerUid, 'name': 'Jake Hensley', 'daysAgo': 1},
+      {'uid': demoForemanUid, 'name': 'Mike Reyes', 'daysAgo': 0}, // today
+      {'uid': demoWorkerUid, 'name': 'Jake Hensley', 'daysAgo': 0},
+      {'uid': user.uid, 'name': contractorName, 'daysAgo': 0},
+      {'uid': demoForemanUid, 'name': 'Mike Reyes', 'daysAgo': -1}, // tomorrow
+    ];
+    for (final s in scheduleDays) {
+      final d = DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: s['daysAgo'] as int));
+      await teamRef.collection('schedule_entries').add({
+        'user_uid': s['uid'],
+        'user_name': s['name'],
+        'project_id': projectRef.id,
+        'project_name': DemoProjectData.project['project_name'],
+        'date': Timestamp.fromDate(d),
+        'created_by_uid': user.uid,
+        'created_at': Timestamp.now(),
+        'is_demo': true,
+      });
+    }
+
+    // Estimate — the accepted quote that became this project. Matches
+    // the schema from EstimateService.create.
+    await db.collection('estimates').add({
+      'title': 'Johnson Residence — Kitchen Remodel',
+      'client_name': 'Sarah Johnson',
+      'client_email': 'sarah.johnson@example.com',
+      'address': '1234 Maple Ave, Anytown, USA',
+      'scope': 'Full kitchen remodel: demo existing cabinets/flooring, '
+          'rough-in plumbing + electrical, install shaker cabinets + '
+          'laminate counters, tile backsplash, appliance reinstall.',
+      'exclusions': 'Appliances (client supplied). Countertop upgrade '
+          'billed separately if selected.',
+      'timeline': 'Approx 8 weeks from start',
+      'line_items': [
+        {'description': 'Demolition & disposal', 'amount': 8000.0},
+        {'description': 'Plumbing + electrical rough-in', 'amount': 12000.0},
+        {'description': 'Cabinets + counters (laminate)', 'amount': 15500.0},
+        {'description': 'Backsplash + finishes', 'amount': 9500.0},
+      ],
+      'total': 45000.0,
+      'photo_urls': <String>[],
+      'status': 'accepted',
+      'contractor_uid': user.uid,
+      'linked_project_id': projectRef.id,
+      'created_at': Timestamp.fromDate(now.subtract(const Duration(days: 32))),
+      'updated_at': Timestamp.fromDate(now.subtract(const Duration(days: 22))),
+      'is_demo': true,
+    });
+
     // Time entries — hours the GC has logged against the project recently.
     final timeLogs = [
       {'daysAgo': 6, 'hours': 7.5, 'note': 'Demolition + debris cleanup'},
@@ -262,11 +348,59 @@ class DemoProjectSeeder {
   }
 
   /// Deletes every project (and subcollections) owned by the signed-in user
-  /// that has `is_demo: true`. Safe to call repeatedly.
+  /// that has `is_demo: true`, plus demo-tagged estimates, team members, and
+  /// schedule entries. Safe to call repeatedly.
   static Future<int> cleanup() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return 0;
     final db = FirebaseFirestore.instance;
+
+    // Team-scoped demo data (members + schedule entries).
+    try {
+      final userSnap = await db.collection('users').doc(user.uid).get();
+      final teamId = userSnap.data()?['team_id'] as String?;
+      if (teamId != null) {
+        final teamRef = db.collection('teams').doc(teamId);
+        for (final sub in ['members', 'schedule_entries']) {
+          try {
+            final demoSnap = await teamRef.collection(sub)
+                .where('is_demo', isEqualTo: true).get();
+            for (final d in demoSnap.docs) {
+              try {
+                await d.reference.delete();
+              } catch (e) {
+                // ignore: avoid_print
+                print('Cleanup: could not delete team/$sub/${d.id}: $e');
+              }
+            }
+          } catch (e) {
+            // ignore: avoid_print
+            print('Cleanup: skipping team/$sub: $e');
+          }
+        }
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Cleanup: skipping team data: $e');
+    }
+
+    // Demo estimates owned by this contractor.
+    try {
+      final estSnap = await db.collection('estimates')
+          .where('contractor_uid', isEqualTo: user.uid)
+          .where('is_demo', isEqualTo: true).get();
+      for (final d in estSnap.docs) {
+        try {
+          await d.reference.delete();
+        } catch (e) {
+          // ignore: avoid_print
+          print('Cleanup: could not delete estimate ${d.id}: $e');
+        }
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Cleanup: skipping estimates: $e');
+    }
 
     final demos = await db.collection('projects')
         .where('contractor_uid', isEqualTo: user.uid)
