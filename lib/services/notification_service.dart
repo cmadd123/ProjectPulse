@@ -515,6 +515,10 @@ class NotificationService {
   // ==================== REVERSE NOTIFICATIONS (Client → GC) ====================
 
   /// Helper: look up GC's FCM tokens from a project
+  /// Resolves contractor's user ref + uid from a project. Does NOT read
+  /// the contractor's user doc — Firestore rules forbid clients from
+  /// reading other users' docs. FCM tokens are now resolved server-side
+  /// by the sendPushNotification Cloud Function via admin SDK.
   static Future<Map<String, dynamic>?> _getContractorFcmData(String projectId) async {
     final projectDoc = await FirebaseFirestore.instance
         .collection('projects')
@@ -526,45 +530,21 @@ class NotificationService {
       return null;
     }
 
-    // Try to get contractor_uid (string) first
     String? contractorUid = projectDoc.data()?['contractor_uid'] as String?;
-
-    // Fallback: If no contractor_uid, try to get it from contractor_ref (DocumentReference)
     if (contractorUid == null) {
-      final contractorRef = projectDoc.data()?['contractor_ref'] as DocumentReference?;
-      if (contractorRef != null) {
-        contractorUid = contractorRef.id;
-        debugPrint('_getContractorFcmData: Using contractor_ref.id: $contractorUid');
-      }
+      final ref = projectDoc.data()?['contractor_ref'] as DocumentReference?;
+      contractorUid = ref?.id;
     }
-
     if (contractorUid == null) {
-      debugPrint('_getContractorFcmData: No contractor_uid or contractor_ref found');
+      debugPrint('_getContractorFcmData: No contractor_uid or contractor_ref on project');
       return null;
     }
-
-    final contractorDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(contractorUid)
-        .get();
-
-    if (!contractorDoc.exists) {
-      debugPrint('_getContractorFcmData: Contractor user $contractorUid does not exist');
-      return null;
-    }
-
-    final fcmTokens = contractorDoc.data()?['fcm_tokens'] as List<dynamic>?;
-    if (fcmTokens == null || fcmTokens.isEmpty) {
-      debugPrint('_getContractorFcmData: Contractor $contractorUid has no FCM tokens');
-      return null;
-    }
-
-    debugPrint('_getContractorFcmData: SUCCESS - Found ${fcmTokens.length} FCM tokens for contractor $contractorUid');
 
     return {
       'contractor_uid': contractorUid,
       'contractor_ref': FirebaseFirestore.instance.collection('users').doc(contractorUid),
-      'fcm_tokens': fcmTokens,
+      // fcm_tokens deliberately empty — Cloud Function resolves them.
+      'fcm_tokens': const <dynamic>[],
     };
   }
 
