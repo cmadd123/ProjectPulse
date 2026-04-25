@@ -442,9 +442,9 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
                 label: 'Home',
               ),
               const NavigationDestination(
-                icon: Icon(Icons.photo_library_outlined),
-                selectedIcon: Icon(Icons.photo_library),
-                label: 'Photos',
+                icon: Icon(Icons.timeline_outlined),
+                selectedIcon: Icon(Icons.timeline),
+                label: 'Timeline',
               ),
               NavigationDestination(
                 icon: Badge(

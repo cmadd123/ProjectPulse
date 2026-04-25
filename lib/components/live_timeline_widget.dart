@@ -130,7 +130,7 @@ class _LiveTimelineWidgetState extends State<LiveTimelineWidget> {
           }
         }
 
-        // Change orders
+        // Change orders (contractor-initiated)
         for (final doc in snapshots[2].docs) {
           final data = doc.data() as Map<String, dynamic>;
           final status = data['status'] as String? ?? 'pending';
@@ -144,6 +144,40 @@ class _LiveTimelineWidgetState extends State<LiveTimelineWidget> {
           ));
         }
 
+        // Client-authored changes (addition requests + quality issues)
+        if (snapshots.length > 3) {
+          for (final doc in snapshots[3].docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final type = (data['type'] as String?) ?? 'addition_request';
+            final status = (data['status'] as String?) ?? 'pending';
+            final requestText = (data['request_text'] as String?) ?? '';
+            final isQualityIssue = type == 'quality_issue';
+            final friendlyTitle = isQualityIssue
+                ? 'Quality Issue Reported'
+                : 'Addition Requested';
+            final friendlyStatus = status == 'addressed'
+                ? 'Addressed'
+                : status == 'approved'
+                    ? 'Approved'
+                    : status == 'declined'
+                        ? 'Declined'
+                        : 'Pending';
+            // Truncate the body so the timeline card stays compact.
+            final preview = requestText.length > 60
+                ? '${requestText.substring(0, 60).trim()}…'
+                : requestText;
+            events.add(_TimelineEvent(
+              type: 'client_change',
+              title: friendlyTitle,
+              subtitle: preview.isNotEmpty
+                  ? '$friendlyStatus · $preview'
+                  : friendlyStatus,
+              amount: '',
+              timestamp: data['created_at'] as Timestamp?,
+            ));
+          }
+        }
+
         // Sort by timestamp descending (newest first)
         events.sort((a, b) {
           final aTime = a.timestamp?.millisecondsSinceEpoch ?? 0;
@@ -151,12 +185,16 @@ class _LiveTimelineWidgetState extends State<LiveTimelineWidget> {
           return bTime.compareTo(aTime);
         });
 
-        // Apply filter
+        // Apply filter. "Changes" lumps both contractor-side change_orders
+        // and client-side change requests since users think of them as the
+        // same category mentally.
         final filtered = events.where((e) {
           if (_selectedFilter == 'All') return true;
           if (_selectedFilter == 'Photos') return e.type == 'photo';
           if (_selectedFilter == 'Milestones') return e.type == 'milestone';
-          if (_selectedFilter == 'Changes') return e.type == 'change_order';
+          if (_selectedFilter == 'Changes') {
+            return e.type == 'change_order' || e.type == 'client_change';
+          }
           return true;
         }).toList();
 
@@ -185,20 +223,20 @@ class _LiveTimelineWidgetState extends State<LiveTimelineWidget> {
   }
 
   Stream<List<QuerySnapshot>> _mergedStream(DocumentReference projectRef) {
+    // Drive on the updates stream; refetch the others on each tick so we
+    // get fresh state for every collection without nesting subscriptions.
     final updatesStream = projectRef.collection('updates')
-        .orderBy('created_at', descending: true)
-        .snapshots();
-    final milestonesStream = projectRef.collection('milestones')
-        .orderBy('order')
-        .snapshots();
-    final changeOrdersStream = projectRef.collection('change_orders')
         .orderBy('created_at', descending: true)
         .snapshots();
 
     return updatesStream.asyncMap((updates) async {
       final milestones = await projectRef.collection('milestones').orderBy('order').get();
       final changeOrders = await projectRef.collection('change_orders').orderBy('created_at', descending: true).get();
-      return [updates, milestones, changeOrders];
+      // Client-authored changes (addition requests + quality issues) are a
+      // separate subcollection; pull them in so they show up alongside
+      // contractor-side change orders on the timeline.
+      final clientChanges = await projectRef.collection('client_changes').get();
+      return [updates, milestones, changeOrders, clientChanges];
     });
   }
 
