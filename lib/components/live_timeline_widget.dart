@@ -308,6 +308,7 @@ class _LiveTimelineWidgetState extends State<LiveTimelineWidget> {
       case 'photo': return Colors.blue[600]!;
       case 'milestone': return Colors.green[600]!;
       case 'change_order': return Colors.orange[600]!;
+      case 'client_change': return Colors.purple[600]!;
       default: return Colors.grey[600]!;
     }
   }
@@ -427,6 +428,42 @@ class _LiveTimelineWidgetState extends State<LiveTimelineWidget> {
                 Text(event.amount ?? '', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange[900])),
               ],
             ),
+            const SizedBox(height: 8),
+            Text(_formatDate(event.timestamp), style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+          ],
+        ),
+      );
+    } else if (event.type == 'client_change') {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.purple[200]!, width: 1.5),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('📝', style: TextStyle(fontSize: 24)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    event.title,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            if ((event.subtitle ?? '').isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                event.subtitle!,
+                style: TextStyle(fontSize: 13, color: Colors.grey[700], height: 1.3),
+              ),
+            ],
             const SizedBox(height: 8),
             Text(_formatDate(event.timestamp), style: TextStyle(fontSize: 12, color: Colors.grey[500])),
           ],
