@@ -29,6 +29,7 @@ import 'services/connectivity_service.dart';
 import 'services/analytics_service.dart';
 import 'screens/shared/notification_center_screen.dart';
 import 'data/demo_project_data.dart';
+import 'services/demo_project_seeder.dart';
 import 'components/skeleton_loader.dart';
 import 'components/segmented_progress_bar.dart';
 // import 'screens/dev/email_preview_screen.dart'; // Removed for production
@@ -1052,6 +1053,103 @@ class _RoleCard extends StatelessWidget {
   }
 }
 
+/// Empty-state card for fresh GCs: seeds the Johnson Residence demo project
+/// into their account so they can poke around a populated example before
+/// inviting a real client.
+class _DemoProjectCard extends StatefulWidget {
+  final VoidCallback onSeeded;
+  const _DemoProjectCard({required this.onSeeded});
+
+  @override
+  State<_DemoProjectCard> createState() => _DemoProjectCardState();
+}
+
+class _DemoProjectCardState extends State<_DemoProjectCard> {
+  bool _seeding = false;
+
+  Future<void> _handleTap() async {
+    setState(() => _seeding = true);
+    try {
+      await DemoProjectSeeder.seed();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Demo project added — tap it to explore.'),
+          backgroundColor: Colors.green[700],
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      widget.onSeeded();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not add demo project: $e'),
+          backgroundColor: Colors.red[700],
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _seeding = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Colors.grey[50],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.grey[300]!),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: _seeding ? null : _handleTap,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Icon(Icons.auto_awesome, color: Colors.grey[600], size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Want to see how it works first?',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Add a demo project to your dashboard',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              if (_seeding)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Icon(Icons.arrow_forward, color: Colors.grey[500], size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // Contractor home screen - checks if profile exists
 class ContractorHomeScreen extends StatelessWidget {
   const ContractorHomeScreen({super.key});
@@ -1946,6 +2044,15 @@ class _ContractorProjectsScreenState
                             ],
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Demo project entry — gives a fresh GC a populated example
+                      // to poke around without having to set anything up.
+                      _DemoProjectCard(
+                        onSeeded: () {
+                          // Stream auto-updates the project list; nothing to do
+                          // here beyond telling the user it worked.
+                        },
                       ),
                     ],
                   ),
