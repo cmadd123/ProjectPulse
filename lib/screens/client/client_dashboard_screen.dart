@@ -337,18 +337,18 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
               //     );
               //   },
               // ),
-              // Design preview button (DEBUG)
-              IconButton(
-                icon: const Icon(Icons.palette_outlined),
-                tooltip: 'Preview Designs',
-                color: Colors.amber.withOpacity(0.9),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const DesignPreviewMenu()),
-                  );
-                },
-              ),
+              // // Design preview button - REMOVED for production
+              // IconButton(
+              //   icon: const Icon(Icons.palette_outlined),
+              //   tooltip: 'Preview Designs',
+              //   color: Colors.amber.withOpacity(0.9),
+              //   onPressed: () {
+              //     Navigator.push(
+              //       context,
+              //       MaterialPageRoute(builder: (context) => const DesignPreviewMenu()),
+              //     );
+              //   },
+              // ),
               // // Debug console button - REMOVED for production
               // IconButton(
               //   icon: const Icon(Icons.bug_report),
