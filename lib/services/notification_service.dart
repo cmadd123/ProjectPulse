@@ -348,18 +348,9 @@ class NotificationService {
         return;
       }
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) {
-        debugPrint('Notification failed: Client user document does not exist');
-        return;
-      }
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      if (fcmTokens == null || fcmTokens.isEmpty) {
-        debugPrint('Notification skipped: Client has no FCM tokens (app not opened or permissions denied)');
-        return;
-      }
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       await FirebaseFirestore.instance.collection('notifications').add({
         'type': 'photo_update',
@@ -424,21 +415,9 @@ class NotificationService {
       }
 
       DebugLogger.log('📥 Fetching client document...');
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) {
-        DebugLogger.log('❌ Client document does not exist');
-        return;
-      }
-      DebugLogger.log('✅ Client document exists');
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      DebugLogger.log('📋 Client FCM tokens: ${fcmTokens?.length ?? 0}');
-
-      if (fcmTokens == null || fcmTokens.isEmpty) {
-        DebugLogger.log('❌ Client has NO FCM tokens');
-        return;
-      }
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       final costChangeText = costChange >= 0
           ? '+\$${costChange.toStringAsFixed(0)}'
@@ -502,23 +481,9 @@ class NotificationService {
       }
       DebugLogger.log('✅ Client reference found');
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) {
-        DebugLogger.log('❌ Client document does not exist');
-        debugPrint('Notification failed: Client user document does not exist');
-        return;
-      }
-      DebugLogger.log('✅ Client document exists');
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      DebugLogger.log('📋 Client FCM tokens: ${fcmTokens?.length ?? 0}');
-
-      if (fcmTokens == null || fcmTokens.isEmpty) {
-        DebugLogger.log('❌ Client has NO FCM tokens');
-        debugPrint('Notification skipped: Client has no FCM tokens (app not opened or permissions denied)');
-        return;
-      }
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       DebugLogger.log('💾 Creating notification document...');
       final recipientUid = _uidFromRef(clientRef);
@@ -856,12 +821,9 @@ class NotificationService {
       final clientRef = projectDoc.data()?['client_user_ref'] as DocumentReference?;
       if (clientRef == null) return;
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) return;
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      if (fcmTokens == null || fcmTokens.isEmpty) return;
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       final recipientUid = _uidFromRef(clientRef);
       await FirebaseFirestore.instance.collection('notifications').add({
@@ -906,12 +868,9 @@ class NotificationService {
       final clientRef = projectDoc.data()?['client_user_ref'] as DocumentReference?;
       if (clientRef == null) return;
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) return;
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      if (fcmTokens == null || fcmTokens.isEmpty) return;
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       final recipientUid = _uidFromRef(clientRef);
       await FirebaseFirestore.instance.collection('notifications').add({
@@ -955,12 +914,9 @@ class NotificationService {
       final clientRef = projectDoc.data()?['client_user_ref'] as DocumentReference?;
       if (clientRef == null) return;
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) return;
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      if (fcmTokens == null || fcmTokens.isEmpty) return;
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       final recipientUid = _uidFromRef(clientRef);
       await FirebaseFirestore.instance.collection('notifications').add({
@@ -1003,12 +959,9 @@ class NotificationService {
       final clientRef = projectDoc.data()?['client_user_ref'] as DocumentReference?;
       if (clientRef == null) return;
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) return;
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      if (fcmTokens == null || fcmTokens.isEmpty) return;
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       final recipientUid = _uidFromRef(clientRef);
       await FirebaseFirestore.instance.collection('notifications').add({
@@ -1061,21 +1014,9 @@ class NotificationService {
       }
       DebugLogger.log('✅ Client reference found');
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) {
-        DebugLogger.log('❌ Client document does not exist');
-        return;
-      }
-      DebugLogger.log('✅ Client document exists');
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      DebugLogger.log('📋 Client FCM tokens: ${fcmTokens?.length ?? 0}');
-
-      if (fcmTokens == null || fcmTokens.isEmpty) {
-        DebugLogger.log('❌ Client has NO FCM tokens');
-        return;
-      }
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       DebugLogger.log('💾 Creating notification document...');
       final recipientUid = _uidFromRef(clientRef);
@@ -1172,12 +1113,9 @@ class NotificationService {
       final clientRef = projectDoc.data()?['client_user_ref'] as DocumentReference?;
       if (clientRef == null) return;
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) return;
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      if (fcmTokens == null || fcmTokens.isEmpty) return;
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       final recipientUid = _uidFromRef(clientRef);
 
@@ -1267,12 +1205,9 @@ class NotificationService {
       final clientRef = projectDoc.data()?['client_user_ref'] as DocumentReference?;
       if (clientRef == null) return;
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) return;
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      if (fcmTokens == null || fcmTokens.isEmpty) return;
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       final recipientUid = _uidFromRef(clientRef);
 
@@ -1354,12 +1289,9 @@ class NotificationService {
       final clientRef = projectDoc.data()?['client_user_ref'] as DocumentReference?;
       if (clientRef == null) return;
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) return;
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      if (fcmTokens == null || fcmTokens.isEmpty) return;
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       final recipientUid = _uidFromRef(clientRef);
       // Truncate update text for notification body
@@ -1408,12 +1340,9 @@ class NotificationService {
       final clientRef = projectDoc.data()?['client_user_ref'] as DocumentReference?;
       if (clientRef == null) return;
 
-      final clientDoc = await clientRef.get();
-      if (!clientDoc.exists) return;
-
-      final clientData = clientDoc.data() as Map<String, dynamic>?;
-      final fcmTokens = clientData?['fcm_tokens'] as List<dynamic>?;
-      if (fcmTokens == null || fcmTokens.isEmpty) return;
+      // FCM tokens are resolved server-side by sendPushNotification —
+      // clients cannot read other users' docs (Firestore rules).
+      final List<dynamic> fcmTokens = const [];
 
       final recipientUid = _uidFromRef(clientRef);
       await FirebaseFirestore.instance.collection('notifications').add({

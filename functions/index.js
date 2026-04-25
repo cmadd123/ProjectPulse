@@ -41,10 +41,27 @@ exports.sendPushNotification = onDocumentCreated(
     }
 
     try {
-      const { fcm_tokens, title, body, data } = notificationData;
+      const { title, body, data } = notificationData;
+      let fcm_tokens = notificationData.fcm_tokens;
+
+      // Fallback: if the app didn't embed fcm_tokens (because it can't
+      // read the recipient's user doc due to Firestore rules), resolve
+      // them server-side from recipient_ref. Admin SDK bypasses rules.
+      if (!fcm_tokens || fcm_tokens.length === 0) {
+        if (notificationData.recipient_ref) {
+          try {
+            const userSnap = await notificationData.recipient_ref.get();
+            if (userSnap.exists) {
+              fcm_tokens = userSnap.data().fcm_tokens || [];
+            }
+          } catch (lookupErr) {
+            console.warn('Failed to resolve fcm_tokens from recipient_ref:', lookupErr.message);
+          }
+        }
+      }
 
       if (!fcm_tokens || fcm_tokens.length === 0) {
-        console.log('No FCM tokens found');
+        console.log('No FCM tokens found (recipient unreachable)');
         await snap.ref.update({ processed: true, error: 'No FCM tokens' });
         return;
       }
