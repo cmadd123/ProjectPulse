@@ -187,6 +187,11 @@ service cloud.firestore {
       // Project owner, team members, and client can read individual documents
       allow get: if canAccessProject(projectId);
 
+      // Public single-doc read for the client-facing project view (Fork 3).
+      // Set is_shared=true by Cloud Function on conversion; project IDs are
+      // 20-char Firestore random tokens, so the URL is the bearer token.
+      allow get: if resource.data.is_shared == true;
+
       // Allow contractors and team members to list projects
       // Allow clients to list projects where they are the client
       allow list: if isAuthenticated();
@@ -224,6 +229,27 @@ service cloud.firestore {
         // Anyone authenticated can read milestones
         allow read: if isAuthenticated();
 
+        // Public single-doc + list read when parent project is shared (Fork 3
+        // client view). Look up parent and check its is_shared flag.
+        allow read: if get(/databases/$(database)/documents/projects/$(projectId)).data.is_shared == true;
+
+        // Public milestone approval (Fork 3). Allows unauthenticated update
+        // when the parent project is shared, current status is
+        // "awaiting_approval", and only the approval-related fields change.
+        // Locks down everything else so a malicious actor with the URL can't
+        // rewrite amount, percentage, etc.
+        allow update: if get(/databases/$(database)/documents/projects/$(projectId)).data.is_shared == true
+          && resource.data.status == 'awaiting_approval'
+          && request.resource.data.status == 'approved'
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly([
+                 'status',
+                 'approved_at',
+                 'approved_by_name',
+                 'approved_signature_text',
+                 'approved_user_agent'
+               ]);
+
         // Change requests subcollection (client feedback on milestones)
         match /change_requests/{requestId} {
           // Client can create change requests
@@ -251,6 +277,10 @@ service cloud.firestore {
         // Only the person who posted can update/delete their own update
         allow update, delete: if isAuthenticated() &&
           resource.data.posted_by_ref == /databases/$(database)/documents/users/$(request.auth.uid);
+
+        // Public read for the Fork 3 client project view — gated by parent
+        // project's is_shared flag (mirrors milestones / invoices pattern).
+        allow read: if get(/databases/$(database)/documents/projects/$(projectId)).data.is_shared == true;
       }
 
       // Change orders subcollection
@@ -267,6 +297,24 @@ service cloud.firestore {
 
         // Only owner can delete
         allow delete: if isProjectOwner(projectId);
+
+        // Public read + approval (Fork 3). Gated by parent project's is_shared.
+        // Approval is locked to the pending→approved|declined transition and
+        // the signature fields — nothing else can be touched.
+        allow read: if get(/databases/$(database)/documents/projects/$(projectId)).data.is_shared == true;
+        allow update: if get(/databases/$(database)/documents/projects/$(projectId)).data.is_shared == true
+          && resource.data.status == 'pending'
+          && (request.resource.data.status == 'approved'
+              || request.resource.data.status == 'declined')
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly([
+                 'status',
+                 'responded_at',
+                 'approved_by_name',
+                 'approved_signature_text',
+                 'approved_user_agent',
+                 'decline_reason'
+               ]);
       }
 
       // Messages subcollection (future feature)
@@ -357,6 +405,11 @@ service cloud.firestore {
 
         // Owner can update (mark as paid) and delete
         allow update, delete: if isProjectOwner(projectId);
+
+        // Public single-doc read for the Fork 3 invoice payment page. Inherits
+        // shareability from the parent project (don't need a per-invoice flag).
+        // Stripe webhook updates go through Admin SDK so they bypass rules.
+        allow get: if get(/databases/$(database)/documents/projects/$(projectId)).data.is_shared == true;
       }
     }
 
@@ -368,6 +421,95 @@ service cloud.firestore {
         resource.data.contractor_uid == request.auth.uid;
       // Allow listing by contractor_uid
       allow list: if isAuthenticated();
+    }
+
+    // Per-team settings (pulse-web): Stripe Connect account, default
+    // deposit %, letterhead overrides. Doc ID is the team_id itself.
+    //
+    // Team members can read + initialize. The Stripe account fields
+    // (stripe_account_id, stripe_account_status, stripe_connected_at) are
+    // written ONLY from the Vercel API route using Firebase Admin SDK, which
+    // bypasses these rules — so they can't be tampered with from a browser
+    // session. Client-side updates from team members are restricted to the
+    // non-sensitive fields (default_deposit_percent, etc).
+    match /org_settings/{teamId} {
+      allow read: if isAuthenticated()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team_id == teamId;
+
+      // First-time create — only the team member can seed.
+      allow create: if isAuthenticated()
+        && request.resource.data.team_id == teamId
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team_id == teamId
+        && !('stripe_account_id' in request.resource.data);
+
+      // Client-side updates restricted to safe fields. Stripe linkage fields
+      // are admin-only.
+      allow update: if isAuthenticated()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team_id == teamId
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['default_deposit_percent', 'updated_at']);
+    }
+
+    // Customers collection (pulse-web: bid → project → invoice spine)
+    // Scoped to team_id; any team member can CRUD their team's customers.
+    match /customers/{customerId} {
+      allow create: if isAuthenticated()
+        && request.resource.data.team_id ==
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team_id;
+      allow read, update, delete: if isAuthenticated()
+        && resource.data.team_id ==
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team_id;
+      allow list: if isAuthenticated();
+    }
+
+    // Bids collection (pulse-web: pre-acceptance proposals on a customer)
+    // Same team scoping as customers. Line items live in a subcollection.
+    // Public single-doc read allowed when is_shared == true (homeowner link).
+    match /bids/{bidId} {
+      allow create: if isAuthenticated()
+        && request.resource.data.team_id ==
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team_id;
+      allow read, update, delete: if isAuthenticated()
+        && resource.data.team_id ==
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team_id;
+      allow list: if isAuthenticated();
+
+      // Public single-doc read for the customer-facing share link.
+      // Bid IDs are random 20-char strings (~120 bits), so the URL itself
+      // is the bearer token; flipping is_shared off revokes access.
+      allow get: if resource.data.is_shared == true;
+
+      // Public accept / decline. Only allowed when the bid is currently
+      // shared and in "sent" state, and only the status + the matching
+      // timestamp / signature fields may change. Locks down everything else
+      // (line items, totals, scope, contractor info, etc) so a malicious
+      // actor with the URL can't rewrite the bid.
+      allow update: if resource.data.is_shared == true
+        && resource.data.status == 'sent'
+        && (request.resource.data.status == 'accepted'
+            || request.resource.data.status == 'declined')
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly([
+               'status',
+               'accepted_at',
+               'declined_at',
+               'accepted_by_name',
+               'accepted_signature_text',
+               'accepted_user_agent'
+             ]);
+
+      // Public view tracking. Anyone with the URL can bump the view counters
+      // — same trust model as the read. Locked to the three view fields so
+      // it can't be used to mutate the bid.
+      allow update: if resource.data.is_shared == true
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['view_count', 'first_viewed_at', 'last_viewed_at']);
+
+      match /lineItems/{lineItemId} {
+        allow read, write: if isAuthenticated()
+          && get(/databases/$(database)/documents/bids/$(bidId)).data.team_id ==
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team_id;
+      }
     }
 
     // Notifications collection (for push notification queue)

@@ -23,6 +23,10 @@
         "destination": "/join.html"
       },
       {
+        "source": "/welcome",
+        "destination": "/welcome.html"
+      },
+      {
         "source": "**",
         "destination": "/join.html"
       }

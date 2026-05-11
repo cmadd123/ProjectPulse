@@ -243,7 +243,7 @@ exports.sendProjectInvitation = onDocumentUpdated(
       const clientName = projectData.client_name || 'there';
       const clientEmail = projectData.client_email;
       const clientPhone = projectData.client_phone;
-      const inviteLink = `https://projectpulsehub.com/join/${projectId}`;
+      const inviteLink = `https://app.projectpulsehub.com/p/${projectId}`;
 
       // Get contractor info for personalized message
       const contractorRef = projectData.contractor_ref;
@@ -783,7 +783,9 @@ async function getEmailContext(notificationData) {
   }
 
   const projectName = projectData.project_name || 'Your Project';
-  const projectLink = `https://projectpulsehub.com/join/${projectId}`;
+  // Fork 3: client lives entirely on web. /p/{projectId} is the single
+  // persistent URL for all project-related touchpoints.
+  const projectLink = `https://app.projectpulsehub.com/p/${projectId}`;
 
   return {
     skip: false,
@@ -859,21 +861,29 @@ exports.sendMilestoneEmail = onDocumentCreated(
     const footer = buildFooter(ctx.contractorName, ctx.contractorEmail, ctx.contractorPhone);
     const contractorSection = buildContractorHeader(ctx.contractorName);
 
+    // Fork 3: link goes directly to the milestone approval page if we know
+    // which milestone fired the notification. Falls back to the full project
+    // page otherwise.
+    const milestoneId = nd.data?.milestone_id;
+    const approveLink = milestoneId
+      ? `https://app.projectpulsehub.com/m/${ctx.projectId}/${milestoneId}`
+      : ctx.projectLink;
+
     const body = `
       ${contractorSection}
       <div style="padding: 30px;">
         <p style="margin: 0 0 12px;">Hi <strong>${ctx.clientName}</strong>!</p>
         <p>${ctx.contractorName} has marked a milestone as complete on your project.</p>
-        <div style="background: #f0fdf4; border-left: 4px solid #10B981; padding: 18px; margin: 20px 0; border-radius: 8px;">
-          <p style="color: #065f46; font-weight: 600; font-size: 18px; margin: 0 0 4px;">${milestoneName}</p>
+        <div style="background: #fff0eb; border-left: 4px solid #ff6b35; padding: 18px; margin: 20px 0; border-radius: 8px;">
+          <p style="color: #2d3748; font-weight: 600; font-size: 18px; margin: 0 0 4px;">${milestoneName}</p>
           <p style="color: #6b7280; font-size: 14px; margin: 0;">${ctx.projectName}</p>
         </div>
         <div style="background: #f8f9fa; padding: 14px; border-radius: 8px; margin: 16px 0;">
           <p style="margin: 0 0 6px; font-size: 14px; color: #374151;"><strong>What happens next?</strong></p>
-          <p style="margin: 0; font-size: 13px; color: #4b5563;">Review the work and photos, then approve the milestone. Payment will be processed upon approval.</p>
+          <p style="margin: 0; font-size: 13px; color: #4b5563;">Review and approve the milestone. An invoice will be generated on approval &mdash; you can pay it right from the project page.</p>
         </div>
         <p style="text-align: center;">
-          <a href="${ctx.projectLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10B981, #059669); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Review &amp; Approve &rarr;</a>
+          <a href="${approveLink}" style="display: inline-block; padding: 14px 32px; background: #ff6b35; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Review &amp; Approve &rarr;</a>
         </p>
       </div>
     `;
@@ -1028,7 +1038,16 @@ exports.sendChangeOrderEmail = onDocumentCreated(
     const isIncrease = costChange.startsWith('+') || !costChange.startsWith('-');
     const accentColor = isIncrease ? '#DC2626' : '#10B981';
     const bgColor = isIncrease ? '#fef2f2' : '#f0fdf4';
-    const gradient = isIncrease ? 'linear-gradient(135deg, #DC2626, #B91C1C)' : 'linear-gradient(135deg, #10B981, #059669)';
+    // Fork 3: stay on-brand (orange) for the CTA regardless of cost direction;
+    // the colored callout above already conveys the direction visually.
+    const gradient = '#ff6b35';
+
+    // Fork 3: direct link to the change-order approval page if we know which
+    // order fired this notification.
+    const changeOrderId = nd.data?.change_order_id;
+    const approveLink = changeOrderId
+      ? `https://app.projectpulsehub.com/co/${ctx.projectId}/${changeOrderId}`
+      : ctx.projectLink;
 
     const footer = buildFooter(ctx.contractorName, ctx.contractorEmail, ctx.contractorPhone);
     const contractorSection = buildContractorHeader(ctx.contractorName);
@@ -1047,7 +1066,7 @@ exports.sendChangeOrderEmail = onDocumentCreated(
           <p style="margin: 0; font-size: 13px; color: #4b5563;">Review the details and approve or decline. Your project cost will be adjusted if approved.</p>
         </div>
         <p style="text-align: center;">
-          <a href="${ctx.projectLink}" style="display: inline-block; padding: 14px 32px; background: ${gradient}; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Review Change Order &rarr;</a>
+          <a href="${approveLink}" style="display: inline-block; padding: 14px 32px; background: ${gradient}; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Review Change Order &rarr;</a>
         </p>
       </div>
     `;
@@ -1574,5 +1593,291 @@ exports.sendPaymentReminders = onSchedule(
     }
 
     console.log(`Payment reminder check complete: ${remindersSent} reminders sent`);
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────
+// Bid response email (pulse-web)
+//
+// Fires when a bid on the top-level `bids/{id}` collection transitions from
+// status "sent" to "accepted" or "declined" — typically because the customer
+// clicked Accept or Decline on a public share link at /b/{bidId}. Emails the
+// GC at the denormalized contractor_email so they know to act even if they're
+// not currently in pulse-web or PP mobile.
+//
+// No notification doc is written here because the customer is unauthenticated;
+// rules wouldn't allow them to create one. Push notifications to the GC would
+// require a separate trigger that writes to notifications/{id} with the GC's
+// user ref — leaving that for a future iteration.
+// ─────────────────────────────────────────────────────────────────
+exports.sendBidResponseEmail = onDocumentUpdated(
+  { document: 'bids/{bidId}', secrets: [sendgridApiKey] },
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+    if (!before || !after) return;
+
+    // Only fire on the exact transitions we care about.
+    if (before.status === after.status) return;
+    if (before.status !== 'sent') return;
+    if (after.status !== 'accepted' && after.status !== 'declined') return;
+
+    const contractorEmail = after.contractor_email;
+    if (!contractorEmail) {
+      console.log(`Skipping bid response email — bid ${event.params.bidId} has no contractor_email`);
+      return;
+    }
+
+    const accepted = after.status === 'accepted';
+    const businessName = after.contractor_business_name || 'your team';
+    const customerName = after.customer_name || 'The customer';
+    const title = after.title || 'a bid';
+    const total = typeof after.total === 'number'
+      ? after.total.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+      : '$0.00';
+
+    const subject = accepted
+      ? `✓ Bid accepted: ${title}`
+      : `Bid declined: ${title}`;
+
+    const headerColor = accepted ? '#ff6b35' : '#6b7280';
+    const headerTitle = accepted ? '&#10003; Bid Accepted' : 'Bid Declined';
+    const headerSub = accepted
+      ? `${customerName} accepted your proposal`
+      : `${customerName} declined your proposal`;
+
+    const appUrl = 'https://app.projectpulsehub.com';
+    const cta = accepted
+      ? `<p style="text-align: center; margin: 24px 0;">
+           <a href="${appUrl}" style="display: inline-block; padding: 14px 32px; background: #ff6b35; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Open dashboard &rarr;</a>
+         </p>
+         <p style="margin: 16px 0 0; font-size: 14px; color: #4b5563;">Convert the bid to a project from the bid detail page to spin up the execution shell in ProjectPulse mobile.</p>`
+      : `<p style="margin: 16px 0 0; font-size: 14px; color: #4b5563;">You can still reach back out directly — the customer may want a revision. If you want to revise the bid, open it in the dashboard and edit.</p>`;
+
+    const html = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7fafc; padding: 0; margin: 0;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
+    <div style="background: ${headerColor}; padding: 28px 30px; color: white;">
+      <div style="font-size: 22px; font-weight: 700;">${headerTitle}</div>
+      <div style="margin-top: 4px; font-size: 14px; opacity: 0.9;">${headerSub}</div>
+    </div>
+    <div style="padding: 30px;">
+      <p style="margin: 0 0 12px;">Hi <strong>${businessName}</strong>,</p>
+      <div style="background: #f7fafc; border-left: 4px solid ${headerColor}; padding: 18px; margin: 20px 0; border-radius: 8px;">
+        <div style="font-weight: 700; font-size: 18px; color: #2d3748;">${title}</div>
+        <div style="margin-top: 4px; font-size: 14px; color: #6b7280;">Customer: ${customerName}</div>
+        <div style="margin-top: 4px; font-size: 14px; color: #6b7280;">Total: <strong style="color: #2d3748;">${total}</strong></div>
+      </div>
+      ${cta}
+    </div>
+    <div style="background: #f8f9fa; padding: 16px 30px; font-size: 12px; color: #6b7280; text-align: center;">
+      Sent via ProjectPulse · pulse-web
+    </div>
+  </div>
+</body></html>`;
+
+    try {
+      sgMail.setApiKey(sendgridApiKey.value());
+      await sgMail.send({
+        to: contractorEmail,
+        from: { email: sendgridFromEmail.value(), name: 'ProjectPulse' },
+        subject,
+        html,
+        trackingSettings: { clickTracking: { enable: false, enableText: false } },
+      });
+      console.log(`✅ Bid response email sent to ${contractorEmail} (${after.status})`);
+    } catch (error) {
+      console.error(`❌ Bid response email error for ${event.params.bidId}:`, error);
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────
+// Auto bid → project conversion (Phase 1a)
+//
+// Fires when a bid's status flips to "accepted." Builds the projects/{id}
+// doc + milestones subcollection so PP mobile picks it up immediately. The
+// shape matches what create_project_screen.dart writes manually, so all
+// existing rules (isProjectOwner, canAccessProject, etc) apply unchanged.
+//
+// Idempotency: skips if converted_project_id is already set on the bid.
+// Re-runs (e.g., if the bid doc is touched again) are safe.
+// ─────────────────────────────────────────────────────────────────
+exports.onBidAcceptCreateProject = onDocumentUpdated(
+  { document: 'bids/{bidId}', secrets: [sendgridApiKey] },
+  async (event) => {
+    const bidId = event.params.bidId;
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+    if (!before || !after) return;
+
+    // Only fire on the transition into accepted, and only once.
+    if (after.status !== 'accepted') return;
+    if (before.status === 'accepted') return;
+    if (after.converted_project_id) {
+      console.log(`Skipping bid ${bidId}: project already created (${after.converted_project_id})`);
+      return;
+    }
+
+    const contractorUid = after.contractor_uid;
+    if (!contractorUid) {
+      console.warn(`Cannot auto-convert bid ${bidId}: no contractor_uid (legacy bid?). GC can convert manually from the bid detail page.`);
+      return;
+    }
+    const customerId = after.customer_id;
+    if (!customerId) {
+      console.warn(`Cannot auto-convert bid ${bidId}: no customer_id`);
+      return;
+    }
+
+    const db = getFirestore();
+
+    // Customer details for project denormalization. Best-effort — if the
+    // customer doc was deleted between accept and this fire, we still
+    // create the project with the bid's denormalized name.
+    let customer = {};
+    try {
+      const custSnap = await db.collection('customers').doc(customerId).get();
+      if (custSnap.exists) customer = custSnap.data() || {};
+    } catch (err) {
+      console.warn(`Customer read failed for bid ${bidId}:`, err);
+    }
+
+    const start = Timestamp.now();
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 30);
+    const end = Timestamp.fromDate(endDate);
+
+    const contractorRef = db.collection('users').doc(contractorUid);
+
+    // Match create_project_screen.dart shape exactly.
+    const projectData = {
+      contractor_ref: contractorRef,
+      contractor_uid: contractorUid,
+      contractor_business_name: after.contractor_business_name || '',
+      team_id: after.team_id,
+      assigned_member_uids: [],
+      assigned_sub_ids: [],
+      project_name: after.title,
+      client_name: after.customer_name || customer.name || '',
+      client_email: customer.email || '',
+      client_phone: customer.phone || '',
+      address: customer.address || '',
+      client_user_ref: null,
+      start_date: start,
+      estimated_end_date: end,
+      actual_end_date: null,
+      status: 'active',
+      original_cost: typeof after.total === 'number' ? after.total : 0,
+      current_cost: typeof after.total === 'number' ? after.total : 0,
+      budget_amount: null,
+      contract_document_url: null,
+      milestones_enabled: false,
+      payment_status: 'unpaid',
+      // Traceability + Fork 3 client URL gate
+      source_bid_id: bidId,
+      is_shared: true,
+      created_at: FieldValue.serverTimestamp(),
+      updated_at: FieldValue.serverTimestamp(),
+    };
+
+    try {
+      const projectRef = await db.collection('projects').add(projectData);
+      const projectId = projectRef.id;
+
+      // Seed milestones from line items. Percentages must sum to 100 (PP
+      // mobile's validator); give the last milestone the residue.
+      const items = Array.isArray(after.line_items) ? after.line_items : [];
+      const subtotal = typeof after.subtotal === 'number' && after.subtotal > 0
+        ? after.subtotal
+        : 0;
+
+      if (items.length > 0 && subtotal > 0) {
+        const milestonesCol = projectRef.collection('milestones');
+        let runningPct = 0;
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          const isLast = i === items.length - 1;
+          const rawPct = ((it.amount || 0) / subtotal) * 100;
+          const pct = isLast
+            ? Math.round((100 - runningPct) * 100) / 100
+            : Math.round(rawPct * 100) / 100;
+          runningPct += pct;
+          const milestone = {
+            name: it.description || `Milestone ${i + 1}`,
+            description: '',
+            amount: it.amount || 0,
+            percentage: pct,
+            order: i + 1,
+            status: 'pending',
+            created_at: FieldValue.serverTimestamp(),
+          };
+          if (it.category) milestone.category = it.category;
+          await milestonesCol.add(milestone);
+        }
+        await projectRef.update({ milestones_enabled: true });
+      }
+
+      // Stamp the link back onto the bid so the UI can show "project active."
+      await db.collection('bids').doc(bidId).update({
+        converted_project_id: projectId,
+        converted_at: FieldValue.serverTimestamp(),
+      });
+
+      console.log(`✅ Auto-created project ${projectId} from bid ${bidId} (${items.length} milestones)`);
+
+      // Send the client a kickoff email with the /p/{projectId} link. This is
+      // the magic-link entry point for Fork 3 — the client never needs an
+      // app, just clicks this every time we email them. Best-effort: if
+      // email fails, the project still exists.
+      const clientEmail = customer.email || after.customer_email;
+      if (clientEmail) {
+        try {
+          sgMail.setApiKey(sendgridApiKey.value());
+          const businessName = after.contractor_business_name || 'Your contractor';
+          const projectLink = `https://app.projectpulsehub.com/p/${projectId}`;
+          const customerName = after.customer_name || customer.name || 'there';
+
+          const html = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7fafc; padding: 0; margin: 0;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
+    <div style="background: #ff6b35; padding: 28px 30px; color: white;">
+      <div style="font-size: 22px; font-weight: 700;">Your project is starting</div>
+      <div style="margin-top: 4px; font-size: 14px; opacity: 0.95;">${businessName}</div>
+    </div>
+    <div style="padding: 30px;">
+      <p style="margin: 0 0 12px;">Hi <strong>${customerName}</strong>,</p>
+      <p>Thanks for choosing ${businessName}. Your project <strong>${after.title}</strong> is officially underway.</p>
+      <p>You can track progress, see milestones, and pay invoices from a single link — no app to install. We&apos;ll email you whenever there&apos;s something new to see.</p>
+      <p style="text-align: center; margin: 28px 0;">
+        <a href="${projectLink}" style="display: inline-block; padding: 14px 32px; background: #ff6b35; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">View your project →</a>
+      </p>
+      <p style="margin: 16px 0 0; font-size: 13px; color: #4b5563;">Save this email — the link will stay live for the duration of the project. You can also bookmark it on your phone or "Add to Home Screen" for one-tap access.</p>
+    </div>
+    <div style="background: #f8f9fa; padding: 16px 30px; font-size: 12px; color: #6b7280; text-align: center;">
+      Questions? Reply to this email — it goes straight to ${businessName}.<br>
+      Sent via ProjectPulse
+    </div>
+  </div>
+</body></html>`;
+
+          await sgMail.send({
+            to: clientEmail,
+            from: { email: sendgridFromEmail.value(), name: businessName },
+            replyTo: after.contractor_email || sendgridFromEmail.value(),
+            subject: `Your project with ${businessName} is starting`,
+            html,
+            trackingSettings: { clickTracking: { enable: false, enableText: false } },
+          });
+          console.log(`✅ Client kickoff email sent to ${clientEmail}`);
+        } catch (emailErr) {
+          console.error(`❌ Client kickoff email failed for project ${projectId}:`, emailErr);
+        }
+      } else {
+        console.log(`Skipping client kickoff email for project ${projectId}: no customer email on file`);
+      }
+    } catch (err) {
+      console.error(`❌ Auto-conversion failed for bid ${bidId}:`, err);
+    }
   }
 );
