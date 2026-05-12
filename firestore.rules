@@ -406,10 +406,12 @@ service cloud.firestore {
         // Owner can update (mark as paid) and delete
         allow update, delete: if isProjectOwner(projectId);
 
-        // Public single-doc read for the Fork 3 invoice payment page. Inherits
-        // shareability from the parent project (don't need a per-invoice flag).
-        // Stripe webhook updates go through Admin SDK so they bypass rules.
-        allow get: if get(/databases/$(database)/documents/projects/$(projectId)).data.is_shared == true;
+        // Public read for the Fork 3 client project page — single-doc get
+        // (invoice detail) AND list (project page surfaces all invoices).
+        // Inherits shareability from the parent project (don't need a
+        // per-invoice flag). Stripe webhook updates go through Admin SDK so
+        // they bypass rules.
+        allow read: if get(/databases/$(database)/documents/projects/$(projectId)).data.is_shared == true;
       }
     }
 
