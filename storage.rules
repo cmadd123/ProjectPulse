@@ -47,6 +47,15 @@ service firebase.storage {
       allow write: if isAuthenticated() && request.auth.uid == contractorId;
     }
 
+    // Team logos — uploaded from pulse-web Settings, rendered on the public
+    // bid letterhead. Public read so /b/{bidId} can show the logo without
+    // auth; write requires the user be a member of that team.
+    match /team_logos/{teamId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated()
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.team_id == teamId;
+    }
+
     // Invoices (auto-generated when client approves milestone)
     match /invoices/{projectId}/{fileName} {
       allow read: if canAccessProject(projectId);
