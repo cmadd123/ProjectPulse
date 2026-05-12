@@ -1785,34 +1785,58 @@ exports.onBidAcceptCreateProject = onDocumentUpdated(
       const projectRef = await db.collection('projects').add(projectData);
       const projectId = projectRef.id;
 
-      // Seed milestones from line items. Percentages must sum to 100 (PP
-      // mobile's validator); give the last milestone the residue.
-      const items = Array.isArray(after.line_items) ? after.line_items : [];
+      // Seed milestones. Post-Path-2 bids carry milestones[] directly; older
+      // bids have line_items[] which we treat 1:1 (matches the lazy migration
+      // in pulse-web's toBid). Percentages must sum to 100 (PP mobile's
+      // validator); give the last milestone the residue.
+      const bidMilestones = Array.isArray(after.milestones) && after.milestones.length > 0
+        ? after.milestones
+        : Array.isArray(after.line_items)
+          ? after.line_items.map((it, idx) => ({
+              id: it.id,
+              name: it.description || `Milestone ${idx + 1}`,
+              amount: it.amount || 0,
+              order: idx + 1,
+              line_items: it.category
+                ? [{ id: it.id, description: it.description, amount: it.amount, category: it.category }]
+                : undefined,
+            }))
+          : [];
       const subtotal = typeof after.subtotal === 'number' && after.subtotal > 0
         ? after.subtotal
         : 0;
 
-      if (items.length > 0 && subtotal > 0) {
+      if (bidMilestones.length > 0 && subtotal > 0) {
         const milestonesCol = projectRef.collection('milestones');
         let runningPct = 0;
-        for (let i = 0; i < items.length; i++) {
-          const it = items[i];
-          const isLast = i === items.length - 1;
-          const rawPct = ((it.amount || 0) / subtotal) * 100;
+        for (let i = 0; i < bidMilestones.length; i++) {
+          const bm = bidMilestones[i];
+          const isLast = i === bidMilestones.length - 1;
+          const rawPct = ((bm.amount || 0) / subtotal) * 100;
           const pct = isLast
             ? Math.round((100 - runningPct) * 100) / 100
             : Math.round(rawPct * 100) / 100;
           runningPct += pct;
           const milestone = {
-            name: it.description || `Milestone ${i + 1}`,
-            description: '',
-            amount: it.amount || 0,
+            name: bm.name || `Milestone ${i + 1}`,
+            description: bm.description || '',
+            amount: bm.amount || 0,
             percentage: pct,
-            order: i + 1,
+            order: bm.order || i + 1,
             status: 'pending',
             created_at: FieldValue.serverTimestamp(),
           };
-          if (it.category) milestone.category = it.category;
+          if (Array.isArray(bm.line_items) && bm.line_items.length > 0) {
+            milestone.line_items = bm.line_items.map((li) => {
+              const out = {
+                id: li.id,
+                description: li.description,
+                amount: li.amount || 0,
+              };
+              if (li.category) out.category = li.category;
+              return out;
+            });
+          }
           await milestonesCol.add(milestone);
         }
         await projectRef.update({ milestones_enabled: true });
@@ -1824,7 +1848,7 @@ exports.onBidAcceptCreateProject = onDocumentUpdated(
         converted_at: FieldValue.serverTimestamp(),
       });
 
-      console.log(`✅ Auto-created project ${projectId} from bid ${bidId} (${items.length} milestones)`);
+      console.log(`✅ Auto-created project ${projectId} from bid ${bidId} (${bidMilestones.length} milestones)`);
 
       // Send the client a kickoff email with the /p/{projectId} link. This is
       // the magic-link entry point for Fork 3 — the client never needs an
