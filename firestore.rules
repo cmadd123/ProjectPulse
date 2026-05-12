@@ -445,11 +445,18 @@ service cloud.firestore {
         && !('stripe_account_id' in request.resource.data);
 
       // Client-side updates restricted to safe fields. Stripe linkage fields
-      // are admin-only.
+      // are admin-only (written via Vercel API route through Admin SDK).
+      // logo_url + bid_sequence are pulse-web client writes; everything else
+      // here is GC-tunable settings.
       allow update: if isAuthenticated()
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team_id == teamId
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['default_deposit_percent', 'updated_at']);
+             .hasOnly([
+               'default_deposit_percent',
+               'logo_url',
+               'bid_sequence',
+               'updated_at',
+             ]);
     }
 
     // Customers collection (pulse-web: bid → project → invoice spine)
